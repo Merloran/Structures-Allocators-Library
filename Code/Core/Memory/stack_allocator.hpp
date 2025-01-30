@@ -1,14 +1,11 @@
 #pragma once
-#include <windows.h>
-#include <cstddef>
-
 #include "memory.hpp"
 
 // Always initialize and when memory is not given finalize this allocator
 class StackAllocator
 {
 private:
-    AllocatorInfo parentInfo;
+    AllocatorInfo  parentInfo;
     Void          *memory;
     UInt64         capacity;
     UInt64         offset;

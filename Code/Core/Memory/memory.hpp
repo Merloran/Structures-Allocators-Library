@@ -2,6 +2,7 @@
 
 //TODO: Think of linux support
 #if defined(_WIN32)
+#include <windows.h>
 static constexpr UInt64 GET_PAGE_SIZE()
 {
     return 4096;
