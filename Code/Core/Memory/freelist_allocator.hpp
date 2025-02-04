@@ -1,58 +1,44 @@
 #pragma once
 #include "memory.hpp"
-
-struct PoolBlock
-{
-    PoolBlock *next;
-};
+#include "Structures/rb_tree.hpp"
 
 // Always initialize and when memory is not given finalize this allocator
 class PoolAllocator
 {
 private:
-    AllocatorInfo  parentInfo;
+    AllocatorInfo parentInfo;
+    RBTree        freeBlocks;
     Void          *memory;
-    PoolBlock     *freeList;
-    UInt64         capacity;
-    UInt64         blockSize;
-    Bool           isIndependent;
+    UInt64        capacity;
+    Bool          isIndependent;
 
 public:
     PoolAllocator()
         : parentInfo({})
         , memory(nullptr)
-        , freeList(nullptr)
         , capacity(0)
-        , blockSize(0)
         , isIndependent(false)
     {}
 
-    Void initialize(const UInt64 count, const UInt64 size)
+    Void initialize(const UInt64 bytes)
     {
-        blockSize = size;
-        capacity = align_memory(count * size);
+        capacity = align_memory(bytes);
         memory = VirtualAlloc(nullptr, capacity, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         if (!memory)
         {
             SPDLOG_CRITICAL("Allocation failed!");
             assert(false);
         }
-
-        freeList = static_cast<PoolBlock *>(memory);
-        PoolBlock *current = freeList;
-        for (UInt64 i = 0; i < count; ++i)
-        {
-            current->next = reinterpret_cast<PoolBlock *>(reinterpret_cast<UInt8 *>(memory) + i * blockSize);
-            current = current->next;
-        }
-        current->next = nullptr;
-
+        freeBlocks = { memory };
+        RBNode *node = static_cast<RBNode*>(memory);
+        *node = {};
+        node->set_size(capacity);
+        freeBlocks.insert(node);
         isIndependent = true;
     }
 
-    Void initialize(const UInt64 count, const UInt64 size, const AllocatorInfo &allocatorInfo)
+    Void initialize(const UInt64 bytes, const AllocatorInfo &allocatorInfo)
     {
-        blockSize = size;
         parentInfo = allocatorInfo;
 
         if (!parentInfo.allocator)
@@ -60,55 +46,34 @@ public:
             SPDLOG_WARN("Parent allocator is nullptr!");
             return;
         }
-        
-        capacity = count * size;
-        memory   = parentInfo.allocate(parentInfo.allocator, capacity);
+
+        capacity = bytes;
+        memory = parentInfo.allocate(parentInfo.allocator, capacity);
+        freeBlocks = { memory };
+        RBNode *node = static_cast<RBNode *>(memory);
+        *node = {};
+        node->set_size(capacity);
+        freeBlocks.insert(node);
         isIndependent = false;
     }
 
 
     Void *allocate(const UInt64 bytes)
     {
-        if (bytes > blockSize)
+        RBNode *data = freeBlocks.find(bytes);
+        freeBlocks.remove(data);
+        RBNode *splitNode = freeBlocks.split_node(data, bytes);
+        if (splitNode)
         {
-            SPDLOG_CRITICAL("Requested too much memory! || Requested: {} || Max: {}", bytes, blockSize);
-            assert(false);
-            return nullptr;
+            freeBlocks.insert(splitNode);
         }
-
-        if (!freeList)
-        {
-            SPDLOG_CRITICAL("Out of memory! || CAPACITY: {}", capacity);
-            assert(false);
-            return nullptr;
-        }
-        Void *address = freeList;
-        freeList = freeList->next;
-        return address;
+        return data->get_memory();
     }
 
     template <typename Type>
     Type *allocate(const UInt64 count)
     {
-        return reinterpret_cast<Type*>(allocate(count * sizeof(Type)));
-    }
-
-    template <typename Type>
-    Void deallocate(Type *pointer)
-    {
-        if (reinterpret_cast<UInt8*>(memory) + capacity <= reinterpret_cast<UInt8*>(pointer))
-        {
-            SPDLOG_WARN("Pointer out of scope!");
-            return;
-        }
-        UInt64 pointerAlignment = (reinterpret_cast<UInt8 *>(pointer) - reinterpret_cast<UInt8 *>(memory)) % blockSize;
-        if (pointerAlignment != 0)
-        {
-            pointer = reinterpret_cast<Type*>(reinterpret_cast<UInt8 *>(pointer) - pointerAlignment);
-        }
-        PoolBlock *freeBlock = static_cast<PoolBlock *>(pointer);
-        freeBlock->next = freeList;
-        freeList = freeBlock;
+        return reinterpret_cast<Type *>(allocate(count * sizeof(Type)));
     }
 
     Void deallocate(Void *pointer, UInt64 bytes)
@@ -118,21 +83,13 @@ public:
             SPDLOG_WARN("Pointer out of scope!");
             return;
         }
-        if (bytes > blockSize)
-        {
-            SPDLOG_WARN("Requested size is too big: {}", bytes);
-            return;
-        }
+        freeBlocks.insert(reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(pointer) - sizeof(RBNode)));
+    }
 
-        UInt64 pointerAlignment = (reinterpret_cast<UInt8 *>(pointer) - reinterpret_cast<UInt8 *>(memory)) % blockSize;
-        if (pointerAlignment != 0)
-        {
-            pointer = reinterpret_cast<Void *>(reinterpret_cast<UInt8 *>(pointer) - pointerAlignment);
-        }
-
-        PoolBlock *freeBlock = static_cast<PoolBlock *>(pointer);
-        freeBlock->next = freeList;
-        freeList = freeBlock;
+    template <typename Type>
+    Void deallocate(Type *pointer)
+    {
+        deallocate(pointer, sizeof(Type));
     }
 
     Void copy(const PoolAllocator &original)
