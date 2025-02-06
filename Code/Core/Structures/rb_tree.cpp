@@ -101,10 +101,16 @@ RBNode* RBTree::split_node(RBNode* node, UInt64 requestedBytes)
     return splitNode;
 }
 
-RBNode* RBTree::coalesce(RBNode* node)
+Void RBTree::coalesce(RBNode* node)
 {
-    RBNode *current = node;
+    RBNode *p = node->get_previous(memory);
+    RBNode *n = node->get_next(memory);
+    if ((!p || !p->is_free()) && (!n || !n->is_free()))
+    {
+        return;
+    }
 
+    RBNode *current = node;
     for (RBNode *previous = current->get_previous(memory);
          previous && previous->is_free();
          previous = current->get_previous(memory))
@@ -124,7 +130,7 @@ RBNode* RBTree::coalesce(RBNode* node)
         current->set_size(current->get_size() + next->get_size() + sizeof(RBNode));
     }
 
-    return current;
+    insert(current);
 }
 
 RBNode* RBTree::find(const UInt64 size) const
@@ -154,7 +160,7 @@ RBNode* RBTree::find(const UInt64 size) const
 Bool RBTree::contains(const RBNode* node) const
 {
     RBNode *current = root;
-    const UInt64 size = current->get_size();
+    const UInt64 size = node->get_size();
     while (current)
     {
         if (current->get_size() > size)
@@ -313,11 +319,16 @@ Void RBTree::fix_insert(RBNode* node)
     }
     root->set_color(RBNode::EColor::Black);
 
-    coalesce(node);
+    //coalesce(node);
 }
 
 Void RBTree::fix_remove(RBNode* node)
 {
+    if (node == nullptr)
+    {
+        return;
+    }
+
     while (node != root && node->get_color() == RBNode::EColor::Black) 
     {
         RBNode *parent = node->get_parent(memory);

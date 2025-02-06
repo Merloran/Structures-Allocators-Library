@@ -20,24 +20,24 @@ constexpr UInt64 operator""_B(const UInt64 value)
     return UInt64(value);
 }
 
-constexpr UInt64 operator""_KB(const UInt64 value)
+constexpr UInt64 operator""_KiB(const UInt64 value)
 {
     return value * 1024_B;
 }
 
-constexpr UInt64 operator""_MB(const UInt64 value)
+constexpr UInt64 operator""_MiB(const UInt64 value)
 {
-    return value * 1024_KB;
+    return value * 1024_KiB;
 }
 
-constexpr UInt64 operator""_GB(const UInt64 value)
+constexpr UInt64 operator""_GiB(const UInt64 value)
 {
-    return value * 1024_MB;
+    return value * 1024_MiB;
 }
 
-constexpr UInt64 operator""_TB(const UInt64 value)
+constexpr UInt64 operator""_TiB(const UInt64 value)
 {
-    return value * 1024_GB;
+    return value * 1024_GiB;
 }
 
 struct AllocatorInfo
