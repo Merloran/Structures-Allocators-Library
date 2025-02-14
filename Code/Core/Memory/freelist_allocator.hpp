@@ -3,9 +3,10 @@
 #include "Structures/rb_tree.hpp"
 
 // Always initialize and when memory is not given finalize this allocator
-class PoolAllocator
+class FreeListAllocator
 {
 private:
+    static constexpr UInt64 MEMORY_INITIAL_OFFSET = 8_B;
     AllocatorInfo parentInfo;
     RBTree        freeBlocks;
     Void          *memory;
@@ -13,7 +14,7 @@ private:
     Bool          isIndependent;
 
 public:
-    PoolAllocator()
+    FreeListAllocator()
         : parentInfo({})
         , memory(nullptr)
         , capacity(0)
@@ -22,7 +23,8 @@ public:
 
     Void initialize(const UInt64 bytes)
     {
-        capacity = align_memory(bytes);
+        constexpr UInt64 ROOT_MEMORY_OFFSET = MEMORY_INITIAL_OFFSET + sizeof(RBNode);
+        capacity = align_memory(bytes + ROOT_MEMORY_OFFSET);
         memory = VirtualAlloc(nullptr, capacity, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         if (!memory)
         {
@@ -30,11 +32,12 @@ public:
             assert(false);
         }
         freeBlocks = { memory };
-        RBNode *node = static_cast<RBNode*>(memory);
-        *node = {};
-        node->set_size(capacity);
-        freeBlocks.insert(node);
+        RBNode *root = reinterpret_cast<RBNode*>(reinterpret_cast<UInt8*>(memory) + MEMORY_INITIAL_OFFSET);
+        *root = {};
+        root->set_size(capacity - ROOT_MEMORY_OFFSET);
+        freeBlocks.insert(root);
         isIndependent = true;
+        freeBlocks.printTree();
     }
 
     Void initialize(const UInt64 bytes, const AllocatorInfo &allocatorInfo)
@@ -46,14 +49,15 @@ public:
             SPDLOG_WARN("Parent allocator is nullptr!");
             return;
         }
+        constexpr UInt64 ROOT_MEMORY_OFFSET = MEMORY_INITIAL_OFFSET + sizeof(RBNode);
 
-        capacity = bytes;
+        capacity = bytes + ROOT_MEMORY_OFFSET;
         memory = parentInfo.allocate(parentInfo.allocator, capacity);
         freeBlocks = { memory };
-        RBNode *node = static_cast<RBNode *>(memory);
-        *node = {};
-        node->set_size(capacity);
-        freeBlocks.insert(node);
+        RBNode *root = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(memory) + MEMORY_INITIAL_OFFSET);
+        *root = {};
+        root->set_size(capacity - ROOT_MEMORY_OFFSET);
+        freeBlocks.insert(root);
         isIndependent = false;
     }
 
@@ -67,6 +71,7 @@ public:
         {
             freeBlocks.insert(splitNode);
         }
+        freeBlocks.printTree();
         return data->get_memory();
     }
 
@@ -83,7 +88,9 @@ public:
             SPDLOG_WARN("Pointer out of scope!");
             return;
         }
-        freeBlocks.insert(reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(pointer) - sizeof(RBNode)));
+        RBNode *node = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(pointer) - sizeof(RBNode));
+        freeBlocks.insert(node);
+        freeBlocks.printTree();
     }
 
     template <typename Type>
@@ -92,7 +99,13 @@ public:
         deallocate(pointer, sizeof(Type));
     }
 
-    Void copy(const PoolAllocator &original)
+    template <>
+    Void deallocate(Void *pointer)
+    {
+        deallocate(pointer, 0);
+    }
+
+    Void copy(const FreeListAllocator &original)
     {
         if (this == &original)
         {
@@ -106,11 +119,11 @@ public:
             return;
         }
         finalize();
-        initialize(original.capacity / blockSize, blockSize);
+        // initialize(original.capacity / blockSize, blockSize);
         memcpy(memory, original.memory, capacity);
     }
 
-    Void move(PoolAllocator &original)
+    Void move(FreeListAllocator &original)
     {
         if (this == &original)
         {
@@ -118,16 +131,16 @@ public:
             return;
         }
         finalize();
-        memory = original.memory;
-        freeList = original.freeList;
-        capacity = original.capacity;
-        blockSize = original.blockSize;
-        isIndependent = original.isIndependent;
-        original.memory = nullptr;
-        original.freeList = nullptr;
-        original.capacity = 0;
-        original.blockSize = 0;
-        original.isIndependent = false;
+        // memory = original.memory;
+        // freeList = original.freeList;
+        // capacity = original.capacity;
+        // blockSize = original.blockSize;
+        // isIndependent = original.isIndependent;
+        // original.memory = nullptr;
+        // original.freeList = nullptr;
+        // original.capacity = 0;
+        // original.blockSize = 0;
+        // original.isIndependent = false;
     }
 
     Void finalize()
@@ -136,13 +149,13 @@ public:
         {
             VirtualFree(memory, 0, MEM_RELEASE);
             memory = nullptr;
-            freeList = nullptr;
+            freeBlocks.clear();
         }
         if (parentInfo.allocator)
         {
             parentInfo.deallocate(parentInfo.allocator, memory, capacity);
             memory = nullptr;
-            freeList = nullptr;
+            freeBlocks.clear();
             parentInfo.allocator = nullptr;
         }
     }
@@ -153,12 +166,12 @@ public:
         info.allocator = this;
         info.allocate = [](Void *allocator, UInt64 bytes) -> Void *
         {
-            return static_cast<PoolAllocator *>(allocator)->allocate(bytes);
+            return static_cast<FreeListAllocator *>(allocator)->allocate(bytes);
         };
 
         info.deallocate = [](Void *allocator, Void *pointer, UInt64 bytes) -> Void
         {
-            static_cast<PoolAllocator *>(allocator)->deallocate(pointer, bytes);
+            static_cast<FreeListAllocator *>(allocator)->deallocate(pointer, bytes);
         };
         return info;
     }

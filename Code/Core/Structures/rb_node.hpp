@@ -1,5 +1,6 @@
 #pragma once
-
+//TODO: remove next from data and make it this - (sizeof(node) + node.size)
+//Node contains compressed pointers to 4.5 bytes
 struct RBNode
 {
 private:
@@ -31,6 +32,8 @@ public:
     Void set_size(UInt64 size);
     Void set_color(EColor color);
     Void set_free(Bool isFree);
+
+    Void reset();
 
     RBNode()
     {

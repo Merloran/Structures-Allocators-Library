@@ -1,46 +1,43 @@
-﻿#include "Core/Structures/rb_node.hpp"
-#include "Memory/memory.hpp"
-#include "Structures/rb_tree.hpp"
+﻿#include "Memory/memory.hpp"
+#include "Memory/freelist_allocator.hpp"
 
 Int32 main()
 {
-    Void *mem = malloc(10_MiB);
-    RBTree rbtree{ mem };
-    RBNode *node7  = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8*>(mem) + 32 * 0 + 8 + 0 ); *node7  = {}; node7->set_size(7);
-    RBNode *node3  = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8*>(mem) + 32 * 1 + 8 + 7 ); *node3  = {}; node3->set_size(3);
-    RBNode *node18 = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8*>(mem) + 32 * 2 + 8 + 10); *node18 = {}; node18->set_size(18);
-    RBNode *node10 = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8*>(mem) + 32 * 3 + 8 + 28); *node10 = {}; node10->set_size(10);
-    RBNode *node22 = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8*>(mem) + 32 * 4 + 8 + 30); *node22 = {}; node22->set_size(22);
-    RBNode *node8  = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8*>(mem) + 32 * 5 + 8 + 52); *node8  = {}; node8->set_size(8);
-    RBNode *node11 = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8*>(mem) + 32 * 6 + 8 + 60); *node11 = {}; node11->set_size(11);
-    RBNode *node26 = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8*>(mem) + 32 * 7 + 8 + 71); *node26 = {}; node26->set_size(26);
-    RBNode *node2  = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8*>(mem) + 32 * 8 + 8 + 97); *node2  = {}; node2->set_size(2);
-    RBNode *node6  = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8*>(mem) + 32 * 9 + 8 + 99); *node6  = {}; node6->set_size(6);
-    rbtree.insert(node7);
-    rbtree.insert(node3);
-    rbtree.insert(node18);
-    rbtree.insert(node10);
-    rbtree.insert(node22);
-    rbtree.insert(node8);
-    rbtree.insert(node11);
-    rbtree.insert(node26);
-    rbtree.insert(node2);
-    rbtree.insert(node6);
+    FreeListAllocator allocator;
+    allocator.initialize(10_KiB);
 
-    // Printing Red-Black Tree
-    rbtree.printTree();
+    SPDLOG_INFO("Allocate 300");
+    Void *rawData2 = allocator.allocate(300_B);
+    SPDLOG_INFO("Allocate 128");
+    Void *rawData = allocator.allocate(128_B);
+    SPDLOG_INFO("Allocate 80");
+    UInt64 *data = allocator.allocate<UInt64>(10);
+    SPDLOG_INFO("Allocate 250");
+    Void *rawData1 = allocator.allocate(250_B);
+    RBNode *node = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(rawData2) - sizeof(RBNode));
+    for (UInt64 i = 0; i < 5; ++i)
+    {
+        std::cout << node->get_size() << "->";
+        node = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(node) + node->get_size() + sizeof(RBNode));
+    }
+    std::cout << std::endl;
+    //(mem) -> r1 -> d -> r -> r2
+    //               ^
+    //(mem) -> r1 -> (d) -> r -> r2
+    //                           ^
+    //(mem) -> r1 -> (d) -> r -> (r2)
+    //         ^
+    //(mem) -> r -> (r2)
+    SPDLOG_INFO("Deallocate 80");
+    allocator.deallocate(data);
+    SPDLOG_INFO("Deallocate 300");
+    allocator.deallocate(rawData2);
+    SPDLOG_INFO("Deallocate 250");
+    allocator.deallocate(rawData1);
+    SPDLOG_INFO("Deallocate 128");
+    allocator.deallocate(rawData);
 
-    // Deleting nodes from Red-Black Tree
-    std::cout << "After deleting 18:" << std::endl;
-    rbtree.remove(node18);
-    rbtree.printTree();
+    allocator.finalize();
 
-    std::cout << "After deleting 11:" << std::endl;
-    rbtree.remove(node11);
-    rbtree.printTree();
-    std::cout << "After deleting 3:" << std::endl;
-    rbtree.remove(node3);
-    rbtree.printTree();
-    free(mem);
     return 0;
 }

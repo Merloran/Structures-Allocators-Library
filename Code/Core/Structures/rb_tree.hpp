@@ -1,7 +1,12 @@
 #pragma once
 #include <iostream>
 
+#if defined(_DEBUG)
+// #include "rb_node_debug.hpp"
+// using RBNode = RBNodeDebug;
+// #else
 #include "rb_node.hpp"
+#endif
 
 class RBTree
 {
@@ -59,6 +64,8 @@ public:
             printHelper(root->get_right(memory), indent, true);
         }
     }
+
+    Void clear();
 
 private:
     Bool contains(const RBNode *node) const;

@@ -166,7 +166,7 @@ Void RBNode::set_size(UInt64 size)
     // Set last 4 bytes to data
     memcpy(data + DATA_OFFSET + 1, reinterpret_cast<UInt8 *>(&size) + 1, 4);
     // Set second half of first shared byte
-    data[DATA_OFFSET] &= 0xf0;
+    data[DATA_OFFSET] &= 0x0f;
     data[DATA_OFFSET] |= size & 0xf0;
 }
 
@@ -190,4 +190,13 @@ Void RBNode::set_free(const Bool isFree)
     } else {
         data[DATA_OFFSET] &= ~0x40;
     }
+}
+
+Void RBNode::reset()
+{
+    memset(data, 0, 13);
+    data[13] &= 0xf0;
+
+    set_color(EColor::Red);
+    set_free(true);
 }
