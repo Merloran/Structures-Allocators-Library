@@ -19,7 +19,6 @@ Void FreeListAllocator::initialize(const UInt64 bytes)
     root->set_size(capacity - ROOT_MEMORY_OFFSET);
     freeBlocks.insert(root);
     isIndependent = true;
-    freeBlocks.print();
 }
 
 Void FreeListAllocator::initialize(const UInt64 bytes, const AllocatorInfo& allocatorInfo)
@@ -52,7 +51,6 @@ Void* FreeListAllocator::allocate(const UInt64 bytes)
     {
         freeBlocks.insert(splitNode);
     }
-    freeBlocks.print();
     return data->get_memory();
 }
 
@@ -65,7 +63,6 @@ Void FreeListAllocator::deallocate(Void* pointer)
     }
     RBNode *node = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(pointer) - sizeof(RBNode));
     freeBlocks.insert(node);
-    freeBlocks.print();
 }
 
 Void FreeListAllocator::copy(const FreeListAllocator& source)

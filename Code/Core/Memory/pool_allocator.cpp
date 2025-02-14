@@ -36,6 +36,16 @@ Void PoolAllocator::initialize(const UInt64 count, const UInt64 size, const Allo
 
     capacity = count * size;
     memory = parentInfo.allocate(parentInfo.allocator, capacity);
+
+    freeList = static_cast<PoolBlock *>(memory);
+    PoolBlock *current = freeList;
+    for (UInt64 i = 0; i < count; ++i)
+    {
+        current->next = reinterpret_cast<PoolBlock *>(reinterpret_cast<UInt8 *>(memory) + i * blockSize);
+        current = current->next;
+    }
+    current->next = nullptr;
+
     isIndependent = false;
 }
 

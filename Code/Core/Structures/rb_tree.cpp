@@ -186,9 +186,7 @@ Void RBTree::print()
     }
 
     SPDLOG_INFO("Red-Black Tree:");
-    spdlog::set_pattern("%v");
     print_helper(root, "", true);
-    spdlog::set_pattern("%+");
 }
 
 Void RBTree::clear()
@@ -465,16 +463,16 @@ Void RBTree::print_helper(const RBNode* node, std::string indent, const Bool las
 {
     if (node)
     {
-        SPDLOG_INFO(indent);
+        printf("%s", indent.c_str());
         if (last)
         {
-            SPDLOG_INFO("R----");
+            printf("R----");
             indent += "   ";
         } else {
-            SPDLOG_INFO("L----");
+            printf("L----");
             indent += "|  ";
         }
-        SPDLOG_INFO("{}({})\n", node->get_size(), magic_enum::enum_name(node->get_color()));
+        printf("%llu(%s)\n", node->get_size(), std::string(magic_enum::enum_name(node->get_color())).c_str());
         print_helper(node->get_left(memory), indent, false);
         print_helper(node->get_right(memory), indent, true);
     }
