@@ -43,8 +43,7 @@ constexpr UInt64 operator""_TiB(const UInt64 value)
 struct AllocatorInfo
 {
     using Allocate = Void*(*)(Void *allocator, UInt64 bytes);
-    using Deallocate = Void(*)(Void *allocator, Void *pointer, UInt64 bytes);
-
+    using Deallocate = Void(*)(Void *allocator, Void *pointer);
     Void *allocator;
     Allocate allocate;
     Deallocate deallocate;

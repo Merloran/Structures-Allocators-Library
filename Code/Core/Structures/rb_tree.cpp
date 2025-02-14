@@ -1,5 +1,14 @@
 #include "rb_tree.hpp"
 
+#if 0 & defined(_DEBUG) // erase 0 & for better debug view, but results will be a bit different because of bigger node size
+#include "rb_node_debug.hpp"
+using RBNode = RBNodeDebug;
+#else
+#include "rb_node.hpp"
+#endif
+
+#include <magic_enum.hpp>
+
 Void RBTree::insert(RBNode* node)
 {
     if (!node)
@@ -85,7 +94,7 @@ Void RBTree::remove(RBNode* node)
     }
 }
 
-RBNode* RBTree::split_node(RBNode* node, UInt64 requestedBytes)
+RBNode* RBTree::split_node(RBNode* node, UInt64 requestedBytes) const
 {
     if (node->get_size() - requestedBytes <= sizeof(RBNode))
     {
@@ -94,11 +103,10 @@ RBNode* RBTree::split_node(RBNode* node, UInt64 requestedBytes)
     RBNode *splitNode = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(node->get_memory()) + requestedBytes);
     splitNode->set_size(node->get_size() - (requestedBytes + sizeof(RBNode)));
     node->set_size(requestedBytes);
-    UInt64 size = node->get_size();
     splitNode->set_free(true);
     splitNode->set_previous(node, memory);
-    splitNode->set_next(node->get_next(memory), memory);
-    node->set_next(splitNode, memory);
+    splitNode->set_next(node->get_next());
+    node->set_next(splitNode);
     return splitNode;
 }
 
@@ -106,7 +114,7 @@ Void RBTree::coalesce(RBNode* node)
 {
     RBNode *current = node;
     RBNode *previous = current->get_previous(memory);
-    RBNode *next = current->get_next(memory);
+    RBNode *next = current->get_next();
     Bool isNextFree = false, isPreviousFree = false;
 
     if (previous)
@@ -130,7 +138,7 @@ Void RBTree::coalesce(RBNode* node)
         remove(previous);
         const UInt64 exactNodeSize = current->get_size() + sizeof(RBNode);
         previous->set_size(previous->get_size() + exactNodeSize);
-        previous->set_next(next, memory);
+        previous->set_next(next);
         current = previous;
     }
 
@@ -139,7 +147,7 @@ Void RBTree::coalesce(RBNode* node)
         remove(next);
         const UInt64 exactNodeSize = next->get_size() + sizeof(RBNode);
         current->set_size(current->get_size() + exactNodeSize);
-        current->set_next(next->get_next(memory), memory);
+        current->set_next(next->get_next());
     }
 
     insert(current);
@@ -167,6 +175,20 @@ RBNode* RBTree::find(const UInt64 size) const
     }
 
     return bestFit;
+}
+
+Void RBTree::print()
+{
+    if (!root)
+    {
+        SPDLOG_INFO("Tree is empty.");
+        return;
+    }
+
+    SPDLOG_INFO("Red-Black Tree:");
+    spdlog::set_pattern("%v");
+    print_helper(root, "", true);
+    spdlog::set_pattern("%+");
 }
 
 Void RBTree::clear()
@@ -308,7 +330,6 @@ Void RBTree::fix_insert(RBNode* node)
                     parent = current->get_parent(memory);
                 }
                 rotate_right(grandparent);
-                //TODO: there is something weird here
                 const RBNode::EColor tempColor = parent->get_color();
                 parent->set_color(grandparent->get_color());
                 grandparent->set_color(tempColor);
@@ -330,7 +351,6 @@ Void RBTree::fix_insert(RBNode* node)
                     parent = current->get_parent(memory);
                 }
                 rotate_left(grandparent);
-                //TODO: there is something weird here
                 const RBNode::EColor tempColor = parent->get_color();
                 parent->set_color(grandparent->get_color());
                 grandparent->set_color(tempColor);
@@ -426,7 +446,7 @@ Void RBTree::fix_remove(RBNode* node)
                     parent = node->get_parent(memory);
                     sibling = parent->get_left(memory);
                 }
-                sibling->set_color(parent->get_color());;
+                sibling->set_color(parent->get_color());
                 parent->set_color(RBNode::EColor::Black);
                 left = sibling->get_left(memory);
                 if (left)
@@ -439,4 +459,23 @@ Void RBTree::fix_remove(RBNode* node)
         }
     }
     node->set_color(RBNode::EColor::Black);
+}
+
+Void RBTree::print_helper(const RBNode* node, std::string indent, const Bool last)
+{
+    if (node)
+    {
+        SPDLOG_INFO(indent);
+        if (last)
+        {
+            SPDLOG_INFO("R----");
+            indent += "   ";
+        } else {
+            SPDLOG_INFO("L----");
+            indent += "|  ";
+        }
+        SPDLOG_INFO("{}({})\n", node->get_size(), magic_enum::enum_name(node->get_color()));
+        print_helper(node->get_left(memory), indent, false);
+        print_helper(node->get_right(memory), indent, true);
+    }
 }

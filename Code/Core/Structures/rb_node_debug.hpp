@@ -23,7 +23,7 @@ public:
     RBNodeDebug *get_parent(Void *memory) const { return parent; }
     RBNodeDebug *get_left(Void *memory) const { return left; }
     RBNodeDebug *get_right(Void *memory) const { return right; }
-    RBNodeDebug *get_next(Void *memory) const { return next; }
+    RBNodeDebug *get_next() const { return next; }
     RBNodeDebug *get_previous(Void *memory) const { return previous; }
     UInt64 get_size() const { return size; }
     EColor get_color() const { return color; }
@@ -33,7 +33,7 @@ public:
     Void set_parent(RBNodeDebug *parent, Void *memory) { this->parent = parent; }
     Void set_left(RBNodeDebug *left, Void *memory) { this->left = left; }
     Void set_right(RBNodeDebug *right, Void *memory) { this->right = right; }
-    Void set_next(RBNodeDebug *next, Void *memory) { this->next = next; }
+    Void set_next(RBNodeDebug *next) { this->next = next; }
     Void set_previous(RBNodeDebug *previous, Void *memory) { this->previous = previous; }
     Void set_size(UInt64 size) { this->size = size; }
     Void set_color(EColor color) { this->color = color; }

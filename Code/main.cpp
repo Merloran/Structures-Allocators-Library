@@ -18,7 +18,7 @@ Int32 main()
     for (UInt64 i = 0; i < 5; ++i)
     {
         std::cout << node->get_size() << "->";
-        node = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(node) + node->get_size() + sizeof(RBNode));
+        node = node->get_next();//reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(node) + node->get_size() + sizeof(RBNode));
     }
     std::cout << std::endl;
     //(mem) -> r1 -> d -> r -> r2
