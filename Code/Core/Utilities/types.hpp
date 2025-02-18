@@ -18,6 +18,3 @@ using UInt64  = uint64_t;
               
 using Float32 = float;
 using Float64 = double;
-
-template <typename Type>
-using Function = std::function<Type>;

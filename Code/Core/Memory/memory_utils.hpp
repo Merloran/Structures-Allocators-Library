@@ -1,5 +1,4 @@
 #pragma once
-
 //TODO: Think of linux support
 #if defined(_WIN32)
 #include <windows.h>
