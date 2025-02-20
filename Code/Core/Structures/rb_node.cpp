@@ -155,7 +155,7 @@ Void RBNode::set_size(UInt64 size)
 {
     if (size > MAX_NODE_SIZE)
     {
-        SPDLOG_CRITICAL("Node size is to large: {}!!!", size);
+        SPDLOG_CRITICAL("Node size is too large: {}!!!", size);
         assert(false);
         return;
     }

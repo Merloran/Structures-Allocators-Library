@@ -10,25 +10,25 @@ struct PoolBlock
 class PoolAllocator
 {
 private:
-    AllocatorInfo  parentInfo;
+    AllocatorInfo selfInfo;
+    AllocatorInfo *parentInfo;
     Void          *memory;
     PoolBlock     *freeList;
-    UInt64         capacity;
-    UInt64         blockSize;
-    Bool           isIndependent;
+    UInt64        capacity;
+    UInt64        blockSize;
 
 public:
     PoolAllocator()
-        : parentInfo({})
+        : selfInfo({})
+        , parentInfo(nullptr)
         , memory(nullptr)
         , freeList(nullptr)
         , capacity(0)
         , blockSize(0)
-        , isIndependent(false)
     {}
 
     Void initialize(UInt64 count, UInt64 size);
-    Void initialize(UInt64 count, UInt64 size, const AllocatorInfo &allocatorInfo);
+    Void initialize(UInt64 count, UInt64 size, AllocatorInfo *allocatorInfo);
 
     Void *allocate(UInt64 bytes);
     template <typename Type>
@@ -45,5 +45,5 @@ public:
 
     Void finalize();
 
-    AllocatorInfo get_allocator_info();
+    AllocatorInfo *get_allocator_info();
 };

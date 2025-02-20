@@ -10,23 +10,43 @@ Void StackAllocator::initialize(const UInt64 bytes)
         SPDLOG_CRITICAL("Allocation failed!");
         assert(false);
     }
-    isIndependent = true;
+
+    selfInfo.allocator = this;
+    selfInfo.allocate = [](Void *allocator, UInt64 bytes) -> Void *
+    {
+        return static_cast<StackAllocator *>(allocator)->allocate(bytes);
+    };
+
+    selfInfo.deallocate = [](Void *allocator, Void *pointer) -> Void
+    {
+        static_cast<StackAllocator *>(allocator)->deallocate(pointer);
+    };
 }
 
-Void StackAllocator::initialize(const UInt64 bytes, const AllocatorInfo& allocatorInfo)
+Void StackAllocator::initialize(const UInt64 bytes, AllocatorInfo *allocatorInfo)
 {
     offset = 0;
     parentInfo = allocatorInfo;
 
-    if (!parentInfo.allocator)
+    if (!parentInfo)
     {
         SPDLOG_WARN("Parent allocator is nullptr!");
         return;
     }
 
+    selfInfo.allocator = this;
+    selfInfo.allocate = [](Void *allocator, UInt64 bytes) -> Void *
+    {
+        return static_cast<StackAllocator *>(allocator)->allocate(bytes);
+    };
+
+    selfInfo.deallocate = [](Void *allocator, Void *pointer) -> Void
+    {
+        static_cast<StackAllocator *>(allocator)->deallocate(pointer);
+    };
+
     capacity = bytes;
-    memory = parentInfo.allocate(parentInfo.allocator, capacity);
-    isIndependent = false;
+    memory = parentInfo->allocate(parentInfo->allocator, capacity);
 }
 
 Void* StackAllocator::allocate(const UInt64 bytes)
@@ -74,7 +94,7 @@ Void StackAllocator::copy(const StackAllocator& source)
 
     finalize();
 
-    if (source.isIndependent)
+    if (!source.parentInfo)
     {
         initialize(source.capacity);
     } else {
@@ -94,7 +114,6 @@ Void StackAllocator::move(StackAllocator& source)
     memory = source.memory;
     capacity = source.capacity;
     offset = source.offset;
-    isIndependent = source.isIndependent;
     source = {};
 }
 
@@ -106,27 +125,16 @@ Void StackAllocator::finalize()
         return;
     }
 
-    if (isIndependent)
+    if (!parentInfo)
     {
         VirtualFree(memory, 0, MEM_RELEASE);
     } else {
-        parentInfo.deallocate(parentInfo.allocator, memory);
+        parentInfo->deallocate(parentInfo->allocator, memory);
     }
     *this = {};
 }
 
-AllocatorInfo StackAllocator::get_allocator_info()
+AllocatorInfo *StackAllocator::get_allocator_info()
 {
-    AllocatorInfo info;
-    info.allocator = this;
-    info.allocate = [](Void *allocator, UInt64 bytes) -> Void *
-    {
-        return static_cast<StackAllocator *>(allocator)->allocate(bytes);
-    };
-
-    info.deallocate = [](Void *allocator, Void *pointer) -> Void
-    {
-        static_cast<StackAllocator *>(allocator)->deallocate(pointer);
-    };
-    return info;
+    return &selfInfo;
 }

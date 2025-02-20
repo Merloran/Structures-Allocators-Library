@@ -11,6 +11,17 @@ Void PoolAllocator::initialize(const UInt64 count, const UInt64 size)
         assert(false);
     }
 
+    selfInfo.allocator = this;
+    selfInfo.allocate = [](Void *allocator, UInt64 bytes) -> Void *
+    {
+        return static_cast<PoolAllocator *>(allocator)->allocate(bytes);
+    };
+
+    selfInfo.deallocate = [](Void *allocator, Void *pointer) -> Void
+    {
+        static_cast<PoolAllocator *>(allocator)->deallocate(pointer);
+    };
+
     freeList = static_cast<PoolBlock *>(memory);
     PoolBlock *current = freeList;
     for (UInt64 i = 0; i < count; ++i)
@@ -19,23 +30,32 @@ Void PoolAllocator::initialize(const UInt64 count, const UInt64 size)
         current = current->next;
     }
     current->next = nullptr;
-
-    isIndependent = true;
 }
 
-Void PoolAllocator::initialize(const UInt64 count, const UInt64 size, const AllocatorInfo& allocatorInfo)
+Void PoolAllocator::initialize(const UInt64 count, const UInt64 size, AllocatorInfo *allocatorInfo)
 {
     blockSize = size;
     parentInfo = allocatorInfo;
 
-    if (!parentInfo.allocator)
+    if (!parentInfo)
     {
         SPDLOG_WARN("Parent allocator is nullptr!");
         return;
     }
 
+    selfInfo.allocator = this;
+    selfInfo.allocate = [](Void *allocator, UInt64 bytes) -> Void *
+    {
+        return static_cast<PoolAllocator *>(allocator)->allocate(bytes);
+    };
+
+    selfInfo.deallocate = [](Void *allocator, Void *pointer) -> Void
+    {
+        static_cast<PoolAllocator *>(allocator)->deallocate(pointer);
+    };
+
     capacity = count * size;
-    memory = parentInfo.allocate(parentInfo.allocator, capacity);
+    memory = parentInfo->allocate(parentInfo->allocator, capacity);
 
     freeList = static_cast<PoolBlock *>(memory);
     PoolBlock *current = freeList;
@@ -45,8 +65,6 @@ Void PoolAllocator::initialize(const UInt64 count, const UInt64 size, const Allo
         current = current->next;
     }
     current->next = nullptr;
-
-    isIndependent = false;
 }
 
 Void* PoolAllocator::allocate(const UInt64 bytes)
@@ -104,7 +122,7 @@ Void PoolAllocator::copy(const PoolAllocator& source)
     }
 
     finalize();
-    if (source.isIndependent)
+    if (!source.parentInfo)
     {
         initialize(source.capacity / blockSize, blockSize);
     } else {
@@ -125,7 +143,6 @@ Void PoolAllocator::move(PoolAllocator& source)
     freeList      = source.freeList;
     capacity      = source.capacity;
     blockSize     = source.blockSize;
-    isIndependent = source.isIndependent;
     source = {};
 }
 
@@ -137,27 +154,16 @@ Void PoolAllocator::finalize()
         return;
     }
 
-    if (isIndependent)
+    if (!parentInfo)
     {
         VirtualFree(memory, 0, MEM_RELEASE);
     } else {
-        parentInfo.deallocate(parentInfo.allocator, memory);
+        parentInfo->deallocate(parentInfo->allocator, memory);
     }
     *this = {};
 }
 
-AllocatorInfo PoolAllocator::get_allocator_info()
+AllocatorInfo *PoolAllocator::get_allocator_info()
 {
-    AllocatorInfo info;
-    info.allocator = this;
-    info.allocate = [](Void *allocator, UInt64 bytes) -> Void *
-    {
-        return static_cast<PoolAllocator *>(allocator)->allocate(bytes);
-    };
-
-    info.deallocate = [](Void *allocator, Void *pointer) -> Void
-    {
-        static_cast<PoolAllocator *>(allocator)->deallocate(pointer);
-    };
-    return info;
+    return &selfInfo;
 }

@@ -7,9 +7,10 @@ using RBNode = RBNodeDebug;
 #include "rb_node.hpp"
 #endif
 
+
 #include <magic_enum.hpp>
 
-Void RBTree::insert(RBNode* node)
+Void RBTree::insert(RBNode* node, Bool shouldCoalesce)
 {
     if (!node)
     {
@@ -42,6 +43,10 @@ Void RBTree::insert(RBNode* node)
     }
 
     fix_insert(node);
+    if (shouldCoalesce)
+    {
+        coalesce(node);
+    }
 }
 
 Void RBTree::remove(RBNode* node)
@@ -101,11 +106,16 @@ RBNode* RBTree::split_node(RBNode* node, UInt64 requestedBytes) const
         return nullptr;
     }
     RBNode *splitNode = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(node->get_memory()) + requestedBytes);
+    RBNode *next = node->get_next();
     splitNode->set_size(node->get_size() - (requestedBytes + sizeof(RBNode)));
     node->set_size(requestedBytes);
     splitNode->set_free(true);
     splitNode->set_previous(node, memory);
-    splitNode->set_next(node->get_next());
+    splitNode->set_next(next);
+    if (next)
+    {
+        next->set_previous(splitNode, memory);
+    }
     node->set_next(splitNode);
     return splitNode;
 }
@@ -140,6 +150,10 @@ Void RBTree::coalesce(RBNode* node)
         previous->set_size(previous->get_size() + exactNodeSize);
         previous->set_next(next);
         current = previous;
+        if (next)
+        {
+            next->set_previous(current, memory);
+        }
     }
 
     if (isNextFree)
@@ -147,10 +161,15 @@ Void RBTree::coalesce(RBNode* node)
         remove(next);
         const UInt64 exactNodeSize = next->get_size() + sizeof(RBNode);
         current->set_size(current->get_size() + exactNodeSize);
-        current->set_next(next->get_next());
+        next = next->get_next();
+        current->set_next(next);
+        if (next)
+        {
+            next->set_previous(current, memory);
+        }
     }
 
-    insert(current);
+    insert(current, false);
 }
 
 RBNode* RBTree::find(const UInt64 size) const
@@ -177,7 +196,7 @@ RBNode* RBTree::find(const UInt64 size) const
     return bestFit;
 }
 
-Void RBTree::print()
+Void RBTree::print_tree()
 {
     if (!root)
     {
@@ -302,14 +321,13 @@ RBNode* RBTree::get_min(RBNode* node) const
     return current;
 }
 
-Void RBTree::fix_insert(RBNode* node)
+Void RBTree::fix_insert(const RBNode* node)
 {
-    RBNode *current = node;
-    while (current != root &&
-           current->get_color() == RBNode::EColor::Red &&
-           current->get_parent(memory)->get_color() == RBNode::EColor::Red)
+    while (node != root &&
+           node->get_color() == RBNode::EColor::Red &&
+           node->get_parent(memory)->get_color() == RBNode::EColor::Red)
     {
-        RBNode* parent = current->get_parent(memory);
+        RBNode* parent = node->get_parent(memory);
         RBNode* grandparent = parent->get_parent(memory);
         if (parent == grandparent->get_left(memory))
         {
@@ -319,19 +337,19 @@ Void RBTree::fix_insert(RBNode* node)
                 grandparent->set_color(RBNode::EColor::Red);
                 parent->set_color(RBNode::EColor::Black);
                 uncle->set_color(RBNode::EColor::Black);
-                current = grandparent;
+                node = grandparent;
             } else {
-                if (current == parent->get_right(memory))
+                if (node == parent->get_right(memory))
                 {
                     rotate_left(parent);
-                    current = parent;
-                    parent = current->get_parent(memory);
+                    node = parent;
+                    parent = node->get_parent(memory);
                 }
                 rotate_right(grandparent);
                 const RBNode::EColor tempColor = parent->get_color();
                 parent->set_color(grandparent->get_color());
                 grandparent->set_color(tempColor);
-                current = parent;
+                node = parent;
             }
         } else {
             RBNode *uncle = grandparent->get_left(memory);
@@ -340,25 +358,23 @@ Void RBTree::fix_insert(RBNode* node)
                 grandparent->set_color(RBNode::EColor::Red);
                 parent->set_color(RBNode::EColor::Black);
                 uncle->set_color(RBNode::EColor::Black);
-                current = grandparent;
+                node = grandparent;
             } else {
-                if (current == parent->get_left(memory))
+                if (node == parent->get_left(memory))
                 {
                     rotate_right(parent);
-                    current = parent;
-                    parent = current->get_parent(memory);
+                    node = parent;
+                    parent = node->get_parent(memory);
                 }
                 rotate_left(grandparent);
                 const RBNode::EColor tempColor = parent->get_color();
                 parent->set_color(grandparent->get_color());
                 grandparent->set_color(tempColor);
-                current = parent;
+                node = parent;
             }
         }
     }
     root->set_color(RBNode::EColor::Black);
-
-    coalesce(node);
 }
 
 Void RBTree::fix_remove(RBNode* node)

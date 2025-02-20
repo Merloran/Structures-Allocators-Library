@@ -7,22 +7,22 @@ class FreeListAllocator
 {
 private:
     static constexpr UInt64 INITIAL_MEMORY_OFFSET = 8_B;
-    AllocatorInfo parentInfo;
     RBTree        freeBlocks;
+    AllocatorInfo selfInfo;
+    AllocatorInfo *parentInfo;
     Void          *memory;
     UInt64        capacity;
-    Bool          isIndependent;
 
 public:
     FreeListAllocator()
-        : parentInfo({})
+        : selfInfo({})
+        , parentInfo(nullptr)
         , memory(nullptr)
         , capacity(0)
-        , isIndependent(false)
     {}
 
     Void initialize(UInt64 bytes);
-    Void initialize(UInt64 bytes, const AllocatorInfo &allocatorInfo);
+    Void initialize(UInt64 bytes, AllocatorInfo *allocatorInfo);
 
     Void *allocate(UInt64 bytes);
     template <typename Type>
@@ -38,7 +38,9 @@ public:
 
     Void move(FreeListAllocator &source);
 
+    Void print_list();
+
     Void finalize();
 
-    AllocatorInfo get_allocator_info();
+    AllocatorInfo *get_allocator_info();
 };

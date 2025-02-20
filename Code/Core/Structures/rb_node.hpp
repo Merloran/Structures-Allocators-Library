@@ -17,6 +17,7 @@ public:
     RBNode *get_parent(Void* memory) const;
     RBNode *get_left(Void *memory) const;
     RBNode *get_right(Void *memory) const;
+    // It calculates pointer based on size
     RBNode *get_next();
     RBNode *get_previous(Void *memory) const;
     UInt64 get_size() const;
@@ -27,6 +28,7 @@ public:
     Void set_parent(RBNode *parent, Void *memory);
     Void set_left(RBNode *left, Void *memory);
     Void set_right(RBNode *right, Void *memory);
+    // It sets isNextSet flag, false for nullptr, so remember to get_next before change size, also see get_next
     Void set_next(RBNode *next);
     Void set_previous(RBNode *previous, Void *memory);
     Void set_size(UInt64 size);

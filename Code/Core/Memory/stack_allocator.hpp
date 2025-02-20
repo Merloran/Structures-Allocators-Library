@@ -5,24 +5,23 @@
 class StackAllocator
 {
 private:
-    AllocatorInfo  parentInfo;
+    AllocatorInfo selfInfo;
+    AllocatorInfo *parentInfo;
     Void          *memory;
-    UInt64         capacity;
-    UInt64         offset;
-    Bool           isIndependent;
+    UInt64        capacity;
+    UInt64        offset;
 
 public:
     StackAllocator()
-        : parentInfo({})
+        : selfInfo({})
+        , parentInfo(nullptr)
         , memory(nullptr)
         , capacity(0)
         , offset(0)
-        , isIndependent(false)
     {}
 
     Void initialize(UInt64 bytes);
-
-    Void initialize(UInt64 bytes, const AllocatorInfo &allocatorInfo);
+    Void initialize(UInt64 bytes, AllocatorInfo *allocatorInfo);
 
     Void *allocate(UInt64 bytes);
     template <typename Type>
@@ -40,5 +39,5 @@ public:
 
     Void finalize();
 
-    AllocatorInfo get_allocator_info();
+    AllocatorInfo *get_allocator_info();
 };

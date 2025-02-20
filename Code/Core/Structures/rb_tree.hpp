@@ -19,7 +19,7 @@ public:
         , root(nullptr)
     {}
 
-    Void insert(RBNode *node);
+    Void insert(RBNode *node, Bool shouldCoalesce = true);
 
     Void remove(RBNode *node);
 
@@ -29,7 +29,7 @@ public:
 
     RBNode *find(UInt64 size) const;
 
-    Void print();
+    Void print_tree();
 
     Void clear();
 
@@ -44,7 +44,7 @@ private:
 
     RBNode *get_min(RBNode *node) const;
 
-    Void fix_insert(RBNode *node);
+    Void fix_insert(const RBNode *node);
 
     Void fix_remove(RBNode *node);
 

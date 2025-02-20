@@ -13,33 +13,55 @@ Void FreeListAllocator::initialize(const UInt64 bytes)
         SPDLOG_CRITICAL("Allocation failed!");
         assert(false);
     }
+
+    selfInfo.allocator = this;
+    selfInfo.allocate = [](Void *allocator, UInt64 bytes) -> Void *
+    {
+        return static_cast<FreeListAllocator *>(allocator)->allocate(bytes);
+    };
+
+    selfInfo.deallocate = [](Void *allocator, Void *pointer) -> Void
+    {
+        static_cast<FreeListAllocator *>(allocator)->deallocate(pointer);
+    };
+
     freeBlocks = { memory };
     RBNode *root = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(memory) + INITIAL_MEMORY_OFFSET);
     *root = {};
     root->set_size(capacity - ROOT_MEMORY_OFFSET);
     freeBlocks.insert(root);
-    isIndependent = true;
 }
 
-Void FreeListAllocator::initialize(const UInt64 bytes, const AllocatorInfo& allocatorInfo)
+Void FreeListAllocator::initialize(const UInt64 bytes, AllocatorInfo *allocatorInfo)
 {
     parentInfo = allocatorInfo;
 
-    if (!parentInfo.allocator)
+    if (!parentInfo)
     {
         SPDLOG_WARN("Parent allocator is nullptr!");
         return;
     }
+
+    selfInfo.allocator = this;
+    selfInfo.allocate = [](Void *allocator, UInt64 bytes) -> Void *
+    {
+        return static_cast<FreeListAllocator *>(allocator)->allocate(bytes);
+    };
+
+    selfInfo.deallocate = [](Void *allocator, Void *pointer) -> Void
+    {
+        static_cast<FreeListAllocator *>(allocator)->deallocate(pointer);
+    };
+
     constexpr UInt64 ROOT_MEMORY_OFFSET = INITIAL_MEMORY_OFFSET + sizeof(RBNode);
 
     capacity = bytes + ROOT_MEMORY_OFFSET;
-    memory = parentInfo.allocate(parentInfo.allocator, capacity);
+    memory = parentInfo->allocate(parentInfo->allocator, capacity);
     freeBlocks = { memory };
     RBNode *root = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(memory) + INITIAL_MEMORY_OFFSET);
     *root = {};
     root->set_size(capacity - ROOT_MEMORY_OFFSET);
     freeBlocks.insert(root);
-    isIndependent = false;
 }
 
 Void* FreeListAllocator::allocate(const UInt64 bytes)
@@ -49,7 +71,7 @@ Void* FreeListAllocator::allocate(const UInt64 bytes)
     RBNode *splitNode = freeBlocks.split_node(data, bytes);
     if (splitNode)
     {
-        freeBlocks.insert(splitNode);
+        freeBlocks.insert(splitNode, false);
     }
     return data->get_memory();
 }
@@ -81,7 +103,7 @@ Void FreeListAllocator::copy(const FreeListAllocator& source)
 
     constexpr UInt64 ROOT_MEMORY_OFFSET = INITIAL_MEMORY_OFFSET + sizeof(RBNode);
     finalize();
-    if (source.isIndependent)
+    if (!source.parentInfo)
     {
         initialize(source.capacity - ROOT_MEMORY_OFFSET);
     } else {
@@ -102,9 +124,19 @@ Void FreeListAllocator::move(FreeListAllocator& source)
     freeBlocks    = source.freeBlocks;
     memory        = source.memory;
     capacity      = source.capacity;
-    isIndependent = source.isIndependent;
 
     source = {};
+}
+
+Void FreeListAllocator::print_list()
+{
+    RBNode *node = reinterpret_cast<RBNode*>(reinterpret_cast<UInt8*>(memory) + INITIAL_MEMORY_OFFSET);
+    while (node)
+    {
+        printf("%llu(%s)->", node->get_size(), node->is_free() ? "free" : "reserved");
+        node = node->get_next();
+    }
+    printf("\n");
 }
 
 Void FreeListAllocator::finalize()
@@ -115,27 +147,16 @@ Void FreeListAllocator::finalize()
         return;
     }
 
-    if (isIndependent)
+    if (!parentInfo)
     {
         VirtualFree(memory, 0, MEM_RELEASE);
     } else {
-        parentInfo.deallocate(parentInfo.allocator, memory);
+        parentInfo->deallocate(parentInfo->allocator, memory);
     }
     *this = {};
 }
 
-AllocatorInfo FreeListAllocator::get_allocator_info()
+AllocatorInfo *FreeListAllocator::get_allocator_info()
 {
-    AllocatorInfo info;
-    info.allocator = this;
-    info.allocate = [](Void *allocator, UInt64 bytes) -> Void *
-    {
-        return static_cast<FreeListAllocator *>(allocator)->allocate(bytes);
-    };
-
-    info.deallocate = [](Void *allocator, Void *pointer) -> Void
-    {
-        static_cast<FreeListAllocator *>(allocator)->deallocate(pointer);
-    };
-    return info;
+    return &selfInfo;
 }

@@ -1,10 +1,10 @@
 #pragma once
 
-template <typename Type, UInt64 count>
+template <typename Type, UInt64 size>
 class Array
 {
 private:
-    Type elements[count];
+    Type elements[size];
 
 public:
     constexpr Array() noexcept
@@ -17,7 +17,7 @@ public:
     }
     
     template <typename... Args,
-              std::enable_if_t<(sizeof...(Args) == count) && 
+              std::enable_if_t<(sizeof...(Args) == size) && 
                                (std::is_same_v<std::decay_t<Args>, Type> && 
                                 ...), Int32> = 0>
     constexpr Array(const Args&... values) noexcept
@@ -27,12 +27,12 @@ public:
     [[nodiscard]]
     constexpr UInt64 get_size() const noexcept
     {
-        return count;
+        return size;
     }
 
     Type &operator[](UInt64 index) noexcept
     {
-        assert(index < count);
+        assert(index < size);
         return elements[index];
     }
 
@@ -43,7 +43,7 @@ public:
 
     Type &get_last() noexcept
     {
-        return elements[count - 1];
+        return elements[size - 1];
     }
 
     Type *get_data() noexcept
@@ -58,18 +58,18 @@ public:
 
     Type *end() noexcept
     {
-        return elements + count;
+        return elements + size;
     }
 
     constexpr Void copy(const Array &source) noexcept
     {
-        memcpy(elements, source.elements, count * sizeof(Type));
+        memcpy(elements, source.elements, size * sizeof(Type));
     }
 
     constexpr Void fill(const Type &value) noexcept
     {
         Type *data = elements;
-        for (UInt64 i = count; i > 0; --i, ++data)
+        for (UInt64 i = size; i > 0; --i, ++data)
         {
             *data = value;
         }
@@ -77,8 +77,8 @@ public:
 
     Void swap(UInt64 left, UInt64 right) noexcept
     {
-        assert(left < count && right < count);
-        Type temporary = elements[left];
+        assert(left < size && right < size);
+        const Type &temporary = elements[left];
         elements[left] = elements[right];
         elements[right] = temporary;
     }
@@ -86,7 +86,7 @@ public:
     [[nodiscard]]
     constexpr Bool contains(const Type &value) const noexcept
     {
-        for (UInt64 i = 0; i < count; ++i)
+        for (UInt64 i = 0; i < size; ++i)
         {
             if (elements[i] == value)
             {
@@ -99,37 +99,37 @@ public:
     [[nodiscard]]
     constexpr Type &operator[](UInt64 index) const noexcept
     {
-        assert(index < count);
+        assert(index < size);
         return elements[index];
     }
 
     [[nodiscard]]
-    const Type &get_first() const noexcept
+    constexpr Type &get_first() const noexcept
     {
         return elements[0];
     }
 
     [[nodiscard]]
-    const Type &get_last() const noexcept
+    constexpr Type &get_last() const noexcept
     {
-        return elements[count - 1];
+        return elements[size - 1];
     }
 
     [[nodiscard]]
-    const Type *get_data() const noexcept
+    constexpr Type *get_data() const noexcept
     {
         return elements;
     }
 
     [[nodiscard]]
-    const Type *begin() const noexcept
+    constexpr Type *begin() const noexcept
     {
         return elements;
     }
 
     [[nodiscard]]
-    const Type *end() const noexcept
+    constexpr Type *end() const noexcept
     {
-        return elements + count;
+        return elements + size;
     }
 };
