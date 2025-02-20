@@ -91,7 +91,10 @@ public:
                 *data = *sourceData;
             }
         }
-        allocatorInfo->deallocate(allocatorInfo->allocator, elements);
+        if (elements)
+        {
+            allocatorInfo->deallocate(allocatorInfo->allocator, elements);
+        }
         elements = newElements;
         capacity = newCapacity;
     }
@@ -135,7 +138,10 @@ public:
                     *data = *sourceData;
                 }
             }
-            allocatorInfo->deallocate(allocatorInfo->allocator, elements);
+            if (elements)
+            {
+                allocatorInfo->deallocate(allocatorInfo->allocator, elements);
+            }
             const UInt64 oldSize = size;
             size = newSize;
             capacity = newSize;
@@ -155,7 +161,7 @@ public:
     {
         if (capacity == size)
         {
-            reserve(capacity + EXPANSION_SIZE);
+            reserve(max(capacity, EXPANSION_SIZE) * 2);
         }
 
         Type &target = elements[size];
@@ -325,7 +331,7 @@ public:
     }
 
     [[nodiscard]]
-    const Type &operator[](UInt64 index) const noexcept
+    inline const Type &operator[](UInt64 index) const noexcept
     {
         assert(index < size);
         return elements[index];
