@@ -41,9 +41,21 @@ constexpr UInt64 operator""_TiB(const UInt64 value)
 
 struct AllocatorInfo
 {
-    using Allocate = Void*(*)(Void *allocator, UInt64 bytes);
+    using Allocate = Void * (*)(Void *allocator, UInt64 bytes);
     using Deallocate = Void(*)(Void *allocator, Void *pointer);
+
     Void *allocator;
     Allocate allocate;
     Deallocate deallocate;
+
+    static AllocatorInfo *get_default_allocator()
+    {
+        static AllocatorInfo defaultAllocator = 
+        {
+            nullptr,
+            [](Void *allocator, UInt64 bytes) -> Void *{ return malloc(bytes); },
+            [](Void *allocator, Void *pointer) { free(pointer); }
+        };
+        return &defaultAllocator;
+    }
 };

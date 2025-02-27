@@ -13,19 +13,20 @@ private:
 public:
     DynamicArray() noexcept
     : elements(nullptr)
-    , allocatorInfo(nullptr)
+    , allocatorInfo(AllocatorInfo::get_default_allocator())
     , capacity(0)
     , size(0)
     {}
 
-    Void initialize(AllocatorInfo *info)
+    Void initialize(AllocatorInfo *allocator = AllocatorInfo::get_default_allocator())
     {
-        allocatorInfo = info;
+        allocatorInfo = allocator;
     }
 
-    Void initialize(const UInt64 initialCapacity, AllocatorInfo *info)
+    Void initialize(const UInt64 initialCapacity, 
+                    AllocatorInfo *allocator = AllocatorInfo::get_default_allocator())
     {
-        allocatorInfo = info;
+        allocatorInfo = allocator;
 
         if (!allocatorInfo)
         {
@@ -38,9 +39,11 @@ public:
         elements = static_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator, capacity * sizeof(Type)));
     }
 
-    Void initialize(const UInt64 initialSize, const Type& initialElement, AllocatorInfo *info)
+    Void initialize(const UInt64 initialSize, 
+                    const Type& initialElement, 
+                    AllocatorInfo *allocator = AllocatorInfo::get_default_allocator())
     {
-        allocatorInfo = info;
+        allocatorInfo = allocator;
 
         if (!allocatorInfo)
         {
@@ -161,7 +164,8 @@ public:
     {
         if (capacity == size)
         {
-            reserve(max(capacity, EXPANSION_SIZE) * 2);
+            SPDLOG_WARN("Reallocation during append, try reserve more memory: {}", capacity + EXPANSION_SIZE);
+            reserve(capacity + EXPANSION_SIZE);
         }
 
         Type &target = elements[size];
@@ -181,6 +185,7 @@ public:
     {
         if (capacity == size)
         {
+            SPDLOG_WARN("Reallocation during emplace, try reserve more memory: {}", capacity + EXPANSION_SIZE);
             reserve(capacity + EXPANSION_SIZE);
         }
 
@@ -247,6 +252,11 @@ public:
 
     Void move(DynamicArray &source) noexcept
     {
+        if (&source == this)
+        {
+            return;
+        }
+
         finalize();
         elements      = source.elements;
         capacity      = source.capacity;
@@ -258,6 +268,11 @@ public:
 
     Void copy(const DynamicArray &source) noexcept
     {
+        if (&source == this)
+        {
+            return;
+        }
+
         finalize();
         initialize(source.capacity, source.allocatorInfo);
 
@@ -328,6 +343,12 @@ public:
             }
             return false;
         }
+    }
+
+    [[nodiscard]]
+    Bool is_empty() const noexcept
+    {
+        return size == 0;
     }
 
     [[nodiscard]]
