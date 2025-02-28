@@ -1,7 +1,7 @@
 #pragma once
-#include <codecvt>
-
 #include "Memory/memory_utils.hpp"
+
+#include <codecvt>
 
 enum class EStringFindStrategy
 {
@@ -45,6 +45,13 @@ private:
     UInt64 size;
 
 public:
+    BasicString() noexcept
+    : allocatorInfo(AllocatorInfo::get_default_allocator())
+    , elements(nullptr)
+    , capacity(0)
+    , size(SSO_FLAG)
+    {}
+
     Void initialize(AllocatorInfo* allocator = AllocatorInfo::get_default_allocator()) noexcept
     {
         allocatorInfo = allocator;
@@ -87,12 +94,13 @@ public:
         elements = static_cast<CharacterType*>(allocatorInfo->allocate(allocator->allocator, 
                                                capacity * sizeof(CharacterType)));
 
-        memcpy(smallText, text, capacity * sizeof(CharacterType));
+        memcpy(elements, text, capacity * sizeof(CharacterType));
     }
 
-    Void reserve(const UInt64 newCapacity) noexcept
+    Void reserve(UInt64 newCapacity) noexcept
     {
-        if (newCapacity + 1 <= capacity || newCapacity <= SSO_CAPACITY)
+        ++newCapacity;
+        if (newCapacity <= SSO_CAPACITY || (!(size & SSO_FLAG) && newCapacity <= capacity))
         {
             return;
         }
@@ -105,6 +113,7 @@ public:
         {
             size &= ~SSO_FLAG;
             memcpy(newElements, smallText, (size + 1) * sizeof(CharacterType));
+            elements = newElements;
             capacity = newCapacity;
             return;
         }
@@ -123,7 +132,7 @@ public:
     Bool check_prefix(const BasicString        &prefix) const noexcept
     {
         const UInt64 prefixSize = prefix.get_size();
-        if (size < prefixSize)
+        if (get_size() < prefixSize)
         {
             return false;
         }
@@ -131,7 +140,7 @@ public:
         return memcmp(begin(), prefix.begin(), prefixSize * sizeof(CharacterType)) == 0;
     }
 
-    Bool check_prefix(const CharacterType *prefix) const noexcept
+    Bool check_prefix(const CharacterType      *prefix) const noexcept
     {
         if (!prefix)
         {
@@ -139,7 +148,7 @@ public:
         }
 
         const UInt64 prefixSize = BasicString::length(prefix);
-        if (size < prefixSize)
+        if (get_size() < prefixSize)
         {
             return false;
         }
@@ -151,15 +160,15 @@ public:
     Bool check_suffix(const BasicString        &suffix) const noexcept
     {
         const UInt64 suffixSize = suffix.get_size();
-        if (size < suffixSize)
+        if (get_size() < suffixSize)
         {
             return false;
         }
 
-        return memcmp(end() - suffixSize - 1, suffix.begin(), suffixSize * sizeof(CharacterType)) == 0;
+        return memcmp(end() - suffixSize, suffix.begin(), suffixSize * sizeof(CharacterType)) == 0;
     }
 
-    Bool check_suffix(const CharacterType *suffix) const noexcept
+    Bool check_suffix(const CharacterType      *suffix) const noexcept
     {
         if (!suffix)
         {
@@ -167,12 +176,11 @@ public:
         }
 
         const UInt64 suffixSize = BasicString::length(suffix);
-        if (size < suffixSize)
+        if (get_size() < suffixSize)
         {
             return false;
         }
-
-        return memcmp(end() - suffixSize - 1, suffix, suffixSize * sizeof(CharacterType)) == 0;
+        return memcmp(end() - suffixSize, suffix, suffixSize * sizeof(CharacterType)) == 0;
     }
 
 
@@ -189,7 +197,7 @@ public:
                 {
                     return ~UInt64(0);
                 }
-                CharacterType *selfData = begin();
+                const CharacterType *selfData = begin();
                 const CharacterType *substringData = substring.begin();
                 for (UInt64 i = 0; i < selfSize - substringSize; ++i, ++selfData)
                 {
@@ -206,7 +214,7 @@ public:
                 {
                     return ~UInt64(0);
                 }
-                CharacterType *selfData = end() - substringSize - 1;
+                const CharacterType *selfData = end() - substringSize;
                 const CharacterType *substringData = substring.begin();
                 for (UInt64 i = selfSize - substringSize + 1; i > 0; --i, --selfData)
                 {
@@ -231,8 +239,8 @@ public:
 
                 UInt64 occurrencesCount = 0;
                 const CharacterType *substringData = substring.begin();
-                for (CharacterType *selfData = begin(), *terminationElement = end() - substringSize - 1; 
-                     selfData < terminationElement;
+                for (const CharacterType *selfData = begin(), *terminationElement = end() - substringSize;
+                     selfData <= terminationElement;
                      ++selfData)
                 {
                     if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
@@ -256,8 +264,8 @@ public:
 
                 UInt64 occurrencesCount = 0;
                 const CharacterType *substringData = substring.begin();
-                for (CharacterType *selfData = begin(), *terminationElement = end() - substringSize - 1; 
-                     selfData < terminationElement;
+                for (const CharacterType *selfData = begin(), *terminationElement = end() - substringSize; 
+                     selfData <= terminationElement;
                      ++selfData)
                 {
                     if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
@@ -290,7 +298,7 @@ public:
                 {
                     return ~UInt64(0);
                 }
-                CharacterType *selfData = begin();
+                const CharacterType *selfData = begin();
                 const CharacterType *substringData = substring;
                 for (UInt64 i = 0; i < selfSize - substringSize; ++i, ++selfData)
                 {
@@ -307,7 +315,7 @@ public:
                 {
                     return ~UInt64(0);
                 }
-                CharacterType *selfData = end() - substringSize - 1;
+                const CharacterType *selfData = end() - substringSize; //TODO: check it
                 const CharacterType *substringData = substring;
                 for (UInt64 i = selfSize - substringSize + 1; i > 0; --i, --selfData)
                 {
@@ -332,8 +340,8 @@ public:
 
                 UInt64 occurrencesCount = 0;
                 const CharacterType *substringData = substring;
-                for (CharacterType *selfData = begin(), *terminationElement = end() - substringSize - 1;
-                     selfData < terminationElement;
+                for (const CharacterType *selfData = begin(), *terminationElement = end() - substringSize;
+                     selfData <= terminationElement;
                      ++selfData)
                 {
                     if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
@@ -357,8 +365,8 @@ public:
 
                 UInt64 occurrencesCount = 0;
                 const CharacterType *substringData = substring;
-                for (CharacterType *selfData = begin(), *terminationElement = end() - substringSize - 1;
-                     selfData < terminationElement;
+                for (const CharacterType *selfData = begin(), *terminationElement = end() - substringSize;
+                     selfData <= terminationElement;
                      ++selfData)
                 {
                     if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
@@ -374,7 +382,7 @@ public:
     }
 
 
-    Bool contains(const BasicString        &substring) const noexcept
+    Bool contains(const BasicString   &substring) const noexcept
     {
         const UInt64 selfSize = size & ~SSO_FLAG;
         const UInt64 substringSize = substring.get_size();
@@ -421,7 +429,7 @@ public:
     }
 
 
-    Int8 compare(const BasicString        &other) const noexcept
+    Int8 compare(const BasicString   &other) const noexcept
     {
         return strcmp(begin(), other.begin());
     }
@@ -432,7 +440,7 @@ public:
     }
 
 
-    Bool equals(const BasicString        &other) const noexcept
+    Bool equals(const BasicString   &other) const noexcept
     {
         if (get_size() != other.get_size())
         {
@@ -448,7 +456,7 @@ public:
     }
 
 
-    Void insert(const UInt64 position, const BasicString        &other) noexcept
+    Void insert(const UInt64 position, const BasicString   &other) noexcept
     {
         const UInt64 selfSize = size & ~SSO_FLAG;
         assert(position <= selfSize);
@@ -498,7 +506,46 @@ public:
     }
 
 
-    Void replace(const BasicString        &newSubstring, const BasicString        &oldSubstring) noexcept
+    Void append(const BasicString   &other) noexcept
+    {
+        const UInt64 selfSize = get_size();
+        const UInt64 otherSize = other.get_size();
+
+        reserve(selfSize + otherSize);
+
+        memcpy(end(), other.get_data(), otherSize * sizeof(CharacterType));
+        size += otherSize;
+        *end() = CharacterType();
+    }
+
+    Void append(const CharacterType *other) noexcept
+    {
+        if (!other)
+        {
+            return;
+        }
+
+        const UInt64 selfSize = get_size();
+        const UInt64 otherSize = BasicString::length(other);
+
+        reserve(selfSize + otherSize);
+
+        memcpy(end(), other, otherSize * sizeof(CharacterType));
+        size += otherSize;
+        *end() = CharacterType();
+    }
+
+    Void append(CharacterType        other) noexcept
+    {
+        reserve(get_size() + 1);
+
+        *end() = other;
+        ++size;
+        *end() = CharacterType();
+    }
+
+
+    Void replace(const BasicString   &newSubstring, const BasicString   &oldSubstring) noexcept
     {
         const UInt64 oldSubstringSize = oldSubstring.get_size();
 
@@ -519,10 +566,10 @@ public:
         }
 
         const CharacterType *oldSubstringData = oldSubstring.begin();
-        const CharacterType *newSubstringData = newSubstring.get_data();
+        const CharacterType *newSubstringData = newSubstring.begin();
         UInt64 currentOffset = 0;
-        for (CharacterType *selfData = begin(), *terminationElement = end() - oldSubstringSize - 1;
-             selfData < terminationElement;
+        for (CharacterType *selfData = begin(), *terminationElement = end() - oldSubstringSize;
+             selfData <= terminationElement;
              ++selfData, ++currentOffset)
         {
             if (memcmp(selfData, oldSubstringData, oldSubstringSize * sizeof(CharacterType)) == 0)
@@ -536,21 +583,146 @@ public:
             }
         }
     }
-    //
-    // Void replace(const CharacterType *newSubstring, const CharacterType *oldSubstring) noexcept
-    // {
-    // }
-    //
-    // Void replace(const String        &newSubstring, const CharacterType *oldSubstring) noexcept
-    // {
-    // }
-    //
-    // Void replace(const CharacterType *newSubstring, const String        &oldSubstring) noexcept
-    // {
-    // }
+    
+    Void replace(const CharacterType *newSubstring, const CharacterType *oldSubstring) noexcept
+    {
+        if (!newSubstring || !oldSubstring)
+        {
+            SPDLOG_WARN("Tried to pass nullptr to replace.");
+            return;
+        }
+
+        const UInt64 oldSubstringSize = BasicString::length(oldSubstring);
+
+        if (oldSubstringSize == 0)
+        {
+            SPDLOG_WARN("Tried to replace empty substring.");
+            return;
+        }
+
+        UInt64 selfSize = get_size();
+        const UInt64 newSubstringSize = BasicString::length(newSubstring);
+        const Int64 sizeDifference = newSubstringSize - oldSubstringSize;
+        if (oldSubstringSize < newSubstringSize)
+        {
+            const UInt64 occurrences = find(oldSubstring, EStringFindStrategy::CountNonOverlapping);
+            reserve(selfSize + occurrences * sizeDifference);
+            size += occurrences * sizeDifference;
+            selfSize = get_size();
+        }
+
+        const CharacterType *oldSubstringData = oldSubstring;
+        const CharacterType *newSubstringData = newSubstring;
+        UInt64 currentOffset = 0;
+        for (CharacterType *selfData = begin(), *terminationElement = end() - oldSubstringSize;
+             selfData <= terminationElement;
+             ++selfData, ++currentOffset)
+        {
+            if (memcmp(selfData, oldSubstringData, oldSubstringSize * sizeof(CharacterType)) == 0)
+            {
+                currentOffset += oldSubstringSize;
+                CharacterType *stringTail = selfData + oldSubstringSize;
+                memmove(stringTail + sizeDifference, stringTail, (selfSize - currentOffset) * sizeof(CharacterType));
+                memcpy(selfData, newSubstringData, newSubstringSize * sizeof(CharacterType));
+                currentOffset += sizeDifference - 1;
+                selfData += newSubstringSize - 1;
+            }
+        }
+    }
+    
+    Void replace(const BasicString   &newSubstring, const CharacterType *oldSubstring) noexcept
+    {
+        if (!oldSubstring)
+        {
+            SPDLOG_WARN("Tried to pass nullptr to replace.");
+            return;
+        }
+
+        const UInt64 oldSubstringSize = BasicString::length(oldSubstring);
+
+        if (oldSubstringSize == 0)
+        {
+            SPDLOG_WARN("Tried to replace empty substring.");
+            return;
+        }
+
+        const UInt64 selfSize = get_size();
+        const UInt64 newSubstringSize = newSubstring.get_size();
+        const Int64 sizeDifference = newSubstringSize - oldSubstringSize;
+        if (oldSubstringSize < newSubstringSize)
+        {
+            const UInt64 occurrences = find(oldSubstring, EStringFindStrategy::CountNonOverlapping);
+            reserve(selfSize + occurrences * sizeDifference);
+            size += occurrences * sizeDifference;
+        }
+
+        const CharacterType *oldSubstringData = oldSubstring;
+        const CharacterType *newSubstringData = newSubstring.begin();
+        UInt64 currentOffset = 0;
+        for (CharacterType *selfData = begin(), *terminationElement = end() - oldSubstringSize;
+             selfData <= terminationElement;
+             ++selfData, ++currentOffset)
+        {
+            if (memcmp(selfData, oldSubstringData, oldSubstringSize * sizeof(CharacterType)) == 0)
+            {
+                currentOffset += oldSubstringSize;
+                CharacterType *stringTail = selfData + oldSubstringSize;
+                memmove(stringTail + sizeDifference, stringTail, (selfSize - currentOffset) * sizeof(CharacterType));
+                memcpy(selfData, newSubstringData, newSubstringSize * sizeof(CharacterType));
+                currentOffset += sizeDifference - 1;
+                selfData += newSubstringSize - 1;
+            }
+        }
+    }
+    
+    Void replace(const CharacterType *newSubstring, const BasicString   &oldSubstring) noexcept
+    {
+        if (!newSubstring)
+        {
+            SPDLOG_WARN("Tried to pass nullptr to replace.");
+            return;
+        }
+
+        const UInt64 oldSubstringSize = oldSubstring.get_size();
+
+        if (oldSubstringSize == 0)
+        {
+            SPDLOG_WARN("Tried to replace empty substring.");
+            return;
+        }
+
+        const UInt64 selfSize = get_size();
+        const UInt64 newSubstringSize = BasicString::length(newSubstring);
+        const Int64 sizeDifference = newSubstringSize - oldSubstringSize;
+        if (oldSubstringSize < newSubstringSize)
+        {
+            const UInt64 occurrences = find(oldSubstring, EStringFindStrategy::CountNonOverlapping);
+            reserve(selfSize + occurrences * sizeDifference);
+            size += occurrences * sizeDifference;
+        }
+
+        const CharacterType *oldSubstringData = oldSubstring.begin();
+        const CharacterType *newSubstringData = newSubstring;
+        UInt64 currentOffset = 0;
+        for (CharacterType *selfData = begin(), *terminationElement = end() - oldSubstringSize;
+             selfData <= terminationElement;
+             ++selfData, ++currentOffset)
+        {
+            if (memcmp(selfData, oldSubstringData, oldSubstringSize * sizeof(CharacterType)) == 0)
+            {
+                currentOffset += oldSubstringSize;
+                CharacterType *stringTail = selfData + oldSubstringSize;
+                memmove(stringTail + sizeDifference, stringTail, (selfSize - currentOffset) * sizeof(CharacterType));
+                memcpy(selfData, newSubstringData, newSubstringSize * sizeof(CharacterType));
+                currentOffset += sizeDifference - 1;
+                selfData += newSubstringSize - 1;
+            }
+        }
+    }
+
 
     template<typename = Void>
-    requires std::is_same_v<CharacterType, Char8>
+    requires (std::is_same_v<CharacterType, Char8> || std::is_same_v<CharacterType, Char>)
     Void to_upper() noexcept
     {
         for (CharacterType *element = begin(); *element != Char8(); ++element)
@@ -563,7 +735,7 @@ public:
     }
 
     template<typename = Void>
-    requires std::is_same_v<CharacterType, Char8>
+    requires (std::is_same_v<CharacterType, Char8> || std::is_same_v<CharacterType, Char>)
     Void to_lower() noexcept
     {
         for (CharacterType *element = begin(); *element != Char8(); ++element)
@@ -635,14 +807,14 @@ public:
     Void remove(const UInt64 position, const UInt64 length) noexcept
     {
         const UInt64 selfSize = size & ~SSO_FLAG;
-        assert(position + length < selfSize);
+        assert(position + length <= selfSize);
 
         CharacterType *elementsDestination = begin() + position;
         CharacterType *elementsToMove      = elementsDestination + length;
         const UInt64   elementsSize        = selfSize - (position + length);
 
         memcpy(elementsDestination, elementsToMove, elementsSize);
-        size -= elementsSize;
+        size -= length;
         *end() = CharacterType();
     }
 
@@ -687,11 +859,13 @@ public:
         allocatorInfo = source.allocatorInfo;
         size          = source.size;
         capacity      = source.capacity;
-        if (!(source.size & SSO_FLAG))
+        if (source.size & SSO_FLAG)
         {
-            memcpy(elements, source.elements, size * sizeof(CharacterType));
-        } else {
             elements = source.elements;
+        } else {
+            elements = reinterpret_cast<CharacterType*>(allocatorInfo->allocate(allocatorInfo->allocator, 
+                                                        capacity * sizeof(CharacterType)));
+            memcpy(elements, source.elements, size * sizeof(CharacterType));
         }
     }
 
@@ -710,6 +884,12 @@ public:
     UInt64 get_size() const noexcept
     {
         return size & ~SSO_FLAG;
+    }
+
+    [[nodiscard]]
+    UInt64 get_capacity() const noexcept
+    {
+        return size & SSO_FLAG ? SSO_CAPACITY : capacity;
     }
 
     // UInt64 hash() const;
@@ -739,41 +919,74 @@ public:
 
     CharacterType *end() noexcept
     {
-        return size & SSO_FLAG ? smallText[size & ~SSO_FLAG] : elements[size & ~SSO_FLAG];
+        return (size & SSO_FLAG) ? smallText + (size & ~SSO_FLAG) : elements + (size & ~SSO_FLAG);
     }
 
     [[nodiscard]]
     const CharacterType *end() const noexcept
     {
-        return size & SSO_FLAG ? smallText[size & ~SSO_FLAG] : elements[size & ~SSO_FLAG];
+        return (size & SSO_FLAG) ? smallText + (size & ~SSO_FLAG) : elements + (size & ~SSO_FLAG);
     }
 
 #pragma region OPERATORS
 
-    CharacterType &operator[](UInt64 index) noexcept
+    inline CharacterType &operator[](UInt64 index) noexcept
     {
         assert(index < size & ~SSO_FLAG);
         return size & SSO_FLAG ? smallText[index] : elements[index];
     }
 
-    CharacterType  operator[](UInt64 index) const noexcept
+    inline CharacterType  operator[](UInt64 index) const noexcept
     {
         assert(index < size & ~SSO_FLAG);
         return size & SSO_FLAG ? smallText[index] : elements[index];
     }
 
-    // String operator+(const String        &other) const;
-    // String operator+(const CharacterType *other) const;
-    // String operator+(      CharacterType  other) const;
-    //
-    // Void   operator+=(const String        &other);
-    // Void   operator+=(const CharacterType *other);
-    // Void   operator+=(      CharacterType  other);
+
+    BasicString operator+(const BasicString   &other) const noexcept
+    {
+        BasicString copy;
+        copy.copy(*this);
+        copy += other;
+        return copy;
+    }
+
+    BasicString operator+(const CharacterType *other) const noexcept
+    {
+        BasicString copy;
+        copy.copy(*this);
+        copy += other;
+        return copy;
+    }
+
+    BasicString operator+(      CharacterType  other) const noexcept
+    {
+        BasicString copy;
+        copy.copy(*this);
+        copy += other;
+        return copy;
+    }
+
+
+    inline Void operator+=(const BasicString   &other)  noexcept
+    {
+        append(other);
+    }
+
+    inline Void operator+=(const CharacterType *other) noexcept
+    {
+        append(other);
+    }
+
+    inline Void operator+=(      CharacterType  other) noexcept
+    {
+        append(other);
+    }
 
     
     inline Bool operator!=(const BasicString &other) const noexcept 
     {
-        return equals(other);
+        return !equals(other);
     }
     
     inline Bool operator==(const BasicString &other) const noexcept
@@ -855,7 +1068,7 @@ public:
         }
 
         clear();
-        allocatorInfo->allocate(allocatorInfo->allocator, capacity);
+        allocatorInfo->deallocate(allocatorInfo->allocator, elements);
         *this = {};
     }
 
@@ -864,14 +1077,31 @@ public:
     template <typename = std::enable_if_t<!std::is_same_v<std::nullptr_t, CharacterType>>>
     static constexpr UInt64 length(const CharacterType *text) noexcept
     {
-        UInt64 length = 0;
-        while (*text != CharacterType())
+        if constexpr (std::is_same_v<CharacterType, Char> || std::is_same_v<CharacterType, Char8>)
         {
-            ++length;
-            ++text;
+            return __builtin_strlen(reinterpret_cast<const Char *>(text));
         }
+        else if constexpr (std::is_same_v<CharacterType, WChar>)
+        {
+            return __builtin_wcslen(text);
+        }
+        else if constexpr (std::is_same_v<CharacterType, Char16> && sizeof(WChar) == 2)
+        {
+            return __builtin_wcslen(reinterpret_cast<const WChar *>(text));
+        }
+        else if constexpr (std::is_same_v<CharacterType, Char32> && sizeof(WChar) == 4)
+        {
+            return __builtin_wcslen(reinterpret_cast<const WChar *>(text));
+        } else {
+            UInt64 length = 0;
+            while (*text != CharacterType())
+            {
+                ++length;
+                ++text;
+            }
 
-        return length;
+            return length;
+        }
     }
 
     static constexpr Bool is_white_space(CharacterType character)
@@ -900,45 +1130,37 @@ public:
     }
 };
 
-
 template <typename CharacterType>
-requires (std::is_same_v<CharacterType, Char> || std::is_same_v<CharacterType, Char8>)
-std::ostream &operator<<(std::ostream &os, const BasicString<CharacterType> &string)
+std::ostream &operator<<(std::ostream &os, const BasicString<CharacterType> &string) noexcept
 {
     if constexpr (std::is_same_v<CharacterType, Char>)
     {
         return os << string.get_data();
-    } else {
-        return os << reinterpret_cast<const Char *>(string.get_data());
     }
-}
-
-template <typename CharacterType>
-requires (std::is_same_v<CharacterType, WChar > ||
-          std::is_same_v<CharacterType, Char16> ||
-          std::is_same_v<CharacterType, Char32>)
-std::wostream &operator<<(std::wostream &os, const BasicString<CharacterType> &string)
-{
-    if constexpr (std::is_same_v<CharacterType, WChar>)
+    else if constexpr (std::is_same_v<CharacterType, Char8>)
     {
-        return os << string.get_data();
-    } else if constexpr (std::is_same_v<CharacterType, Char16>)
-    {
-        if constexpr (sizeof(WChar) == 2)
-        {
-            return os << reinterpret_cast<const WChar *>(string.get_data());
-        } else {
-            std::wstring_convert<std::codecvt_utf8_utf16<Char16>, Char16> converter;
-            return os << converter.to_bytes(string.get_data());
-        }
+        return os << reinterpret_cast<const Char *>(string.get_data());
     } else {
-        if constexpr (sizeof(WChar) == 4)
+        std::wstring wstring;
+
+        for (CharacterType c : string) 
         {
-            return os << reinterpret_cast<const WChar *>(string.get_data());
-        } else {
-            std::wstring_convert<std::codecvt_utf16<Char32>, Char32> converter;
-            return os << converter.to_bytes(string.get_data());
+            if (c == 0)
+            {
+                break;
+            }
+
+            if (c <= 0xFFFF) 
+            {
+                wstring += static_cast<WChar>(c);
+            } else {
+                c -= 0x10000;
+                wstring += static_cast<WChar>((c >> 10) + 0xD800);
+                wstring += static_cast<WChar>((c & 0x3FF) + 0xDC00);
+            }
         }
+
+        return os << std::wstring_convert<std::codecvt_utf8<WChar>>().to_bytes(wstring);
     }
 }
 

@@ -302,20 +302,38 @@ public:
 
     Void fill(const Type &value) noexcept
     {
-        Type *data = elements;
-        for (UInt64 i = size; i > 0; --i, ++data)
-        {   
-            *data = value;
+        if constexpr (requires(Type obj) { obj.copy(Type()); })
+        {
+            Type *data = elements;
+            for (UInt64 i = size; i > 0; --i, ++data)
+            {
+                data->copy(value);
+            }
+        } else {
+            Type *data = elements;
+            for (UInt64 i = size; i > 0; --i, ++data)
+            {
+                *data = value;
+            }
         }
     }
 
     Void fill(UInt64 begin, const UInt64 end, const Type &value) noexcept
     {
         assert(begin < size && end <= size);
-        Type *data = elements + begin;
-        for (UInt64 i = end; i > begin; --i, ++data)
+        if constexpr (requires(Type obj) { obj.copy(Type()); })
         {
-            *data = value;
+            Type *data = elements + begin;
+            for (UInt64 i = end; i > begin; --i, ++data)
+            {
+                data->copy(value);
+            }
+        } else {
+            Type *data = elements + begin;
+            for (UInt64 i = end; i > begin; --i, ++data)
+            {
+                *data = value;
+            }
         }
     }
 
