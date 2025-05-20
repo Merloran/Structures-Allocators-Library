@@ -12,10 +12,10 @@ class PoolAllocator
 private:
     AllocatorInfo selfInfo;
     AllocatorInfo *parentInfo;
-    Void          *memory;
+    Byte          *memory;
     PoolBlock     *freeList;
-    UInt64        capacity;
-    UInt64        blockSize;
+    USize        capacity;
+    USize        blockSize;
 
 public:
     PoolAllocator()
@@ -27,23 +27,42 @@ public:
         , blockSize(0)
     {}
 
-    Void initialize(UInt64 count, UInt64 size);
-    Void initialize(UInt64 count, UInt64 size, AllocatorInfo *allocatorInfo);
+    Void initialize(USize count, USize size) noexcept;
+    Void initialize(USize count, USize size, AllocatorInfo *allocatorInfo) noexcept;
 
-    Void *allocate(UInt64 bytes);
+    Byte *allocate(USize bytes, USize alignment) noexcept;
     template <typename Type>
-    Type *allocate(const UInt64 count)
+    [[nodiscard]]
+    Type *allocate() noexcept
     {
-        return reinterpret_cast<Type*>(allocate(count * sizeof(Type)));
+        return new (allocate(sizeof(Type), alignof(Type))) Type();
+    }
+    template <typename Type>
+    [[nodiscard]]
+    Type *allocate(const USize count) noexcept
+    {
+        Type *mem = reinterpret_cast<Type *>(allocate(count * sizeof(Type), alignof(Type)));
+
+        for (USize i = 0; i < count; ++i)
+        {
+            new (&mem[i]) Type();
+        }
+
+        return mem;
     }
 
-    Void deallocate(Void *pointer);
+    Void deallocate(Byte *pointer) noexcept;
+    template <typename Type>
+    Void deallocate(Type *pointer) noexcept
+    {
+        deallocate(byte_cast(pointer));
+    }
 
-    Void copy(const PoolAllocator &source);
+    Void copy(const PoolAllocator &source) noexcept;
 
-    Void move(PoolAllocator &source);
+    Void move(PoolAllocator &source) noexcept;
 
-    Void finalize();
+    Void finalize() noexcept;
 
-    AllocatorInfo *get_allocator_info();
+    AllocatorInfo *get_allocator_info() noexcept;
 };

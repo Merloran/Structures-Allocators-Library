@@ -1,52 +1,52 @@
 #pragma once
 
-struct RBNode;
-
+struct RBNodePacked;
+// TODO: Add support for RBNode 
 class RBTree
 {
 private:
-    Void *memory;
-    RBNode *root;
+    Byte *memory;
+    RBNodePacked *root;
 
 public:
-    RBTree()
+    RBTree() noexcept
         : memory(nullptr)
         , root(nullptr)
     {}
 
-    RBTree(Void* allocatedMemory)
+    RBTree(Byte* allocatedMemory) noexcept
         : memory(allocatedMemory)
         , root(nullptr)
     {}
 
-    Void insert(RBNode *node, Bool shouldCoalesce = true);
+    Void insert(RBNodePacked *node, Bool shouldCoalesce = true) noexcept;
 
-    Void remove(RBNode *node);
+    Void remove(RBNodePacked *node) noexcept;
 
-    RBNode *split_node(RBNode *node, UInt64 requestedBytes) const;
+    RBNodePacked *split_node(RBNodePacked *node, USize requestedBytes) const noexcept;
 
-    Void coalesce(RBNode *node);
+    Void coalesce(RBNodePacked *node) noexcept;
 
-    RBNode *find(UInt64 size) const;
+    RBNodePacked *find(USize size) const noexcept;
 
-    Void print_tree();
+    Void print_tree() noexcept;
 
-    Void clear();
+    Void clear() noexcept;
 
 private:
-    Bool contains(const RBNode *node) const;
+    Bool contains(const RBNodePacked *node) const noexcept;
 
-    Void rotate_left(RBNode *node);
+    Void rotate_left(RBNodePacked *node) noexcept;
 
-    Void rotate_right(RBNode *node);
+    Void rotate_right(RBNodePacked *node) noexcept;
 
-    Void transplant(const RBNode *u, RBNode *v);
+    Void transplant(const RBNodePacked *u, RBNodePacked *v) noexcept;
 
-    RBNode *get_min(RBNode *node) const;
+    RBNodePacked *get_min(RBNodePacked *node) const noexcept;
 
-    Void fix_insert(const RBNode *node);
+    Void fix_insert(const RBNodePacked *node) noexcept;
 
-    Void fix_remove(RBNode *node);
+    Void fix_remove(RBNodePacked *node) noexcept;
 
-    Void print_helper(const RBNode *node, std::string indent, Bool last);
+    Void print_helper(const RBNodePacked *node, std::string indent, Bool last) noexcept;
 };

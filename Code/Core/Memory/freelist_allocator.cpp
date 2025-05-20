@@ -1,74 +1,69 @@
 #include "freelist_allocator.hpp"
 
-#include "Structures/rb_node.hpp"
+#include "Structures/rb_node_packed.hpp"
 
 
-Void FreeListAllocator::initialize(const UInt64 bytes)
+Void FreeListAllocator::initialize(const USize bytes) noexcept
 {
-    constexpr UInt64 ROOT_MEMORY_OFFSET = INITIAL_MEMORY_OFFSET + sizeof(RBNode);
-    capacity = align_memory(bytes + ROOT_MEMORY_OFFSET);
-    memory = VirtualAlloc(nullptr, capacity, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    if (!memory)
-    {
-        SPDLOG_CRITICAL("Allocation failed!");
-        assert(false);
-    }
+    capacity = align_memory(bytes + sizeof(RBNodePacked));
+    memory = byte_cast(VirtualAlloc(nullptr, 
+                                           capacity, 
+                                           MEM_RESERVE | MEM_COMMIT, 
+                                           PAGE_READWRITE));
+
+    assert(memory != nullptr && "Allocation failed!");
 
     selfInfo.allocator = this;
-    selfInfo.allocate = [](Void *allocator, UInt64 bytes) -> Void *
+    selfInfo.allocate = [](Void *allocator, const USize bytes, const USize alignment) -> Byte *
     {
-        return static_cast<FreeListAllocator *>(allocator)->allocate(bytes);
+        return static_cast<FreeListAllocator *>(allocator)->allocate(bytes, alignment);
     };
 
-    selfInfo.deallocate = [](Void *allocator, Void *pointer) -> Void
+    selfInfo.deallocate = [](Void *allocator, Byte *pointer) -> Void
     {
         static_cast<FreeListAllocator *>(allocator)->deallocate(pointer);
     };
 
     freeBlocks = { memory };
-    RBNode *root = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(memory) + INITIAL_MEMORY_OFFSET);
+    RBNodePacked *root = new (memory) RBNodePacked();
     *root = {};
-    root->set_size(capacity - ROOT_MEMORY_OFFSET);
+    root->set_size(capacity - sizeof(RBNodePacked));
     freeBlocks.insert(root);
 }
 
-Void FreeListAllocator::initialize(const UInt64 bytes, AllocatorInfo *allocatorInfo)
+Void FreeListAllocator::initialize(const USize bytes, AllocatorInfo *allocatorInfo) noexcept
 {
     parentInfo = allocatorInfo;
 
-    if (!parentInfo)
-    {
-        SPDLOG_WARN("Parent allocator is nullptr!");
-        return;
-    }
+    assert(parentInfo != nullptr && "Parent allocator is nullptr!");
 
     selfInfo.allocator = this;
-    selfInfo.allocate = [](Void *allocator, UInt64 bytes) -> Void *
+    selfInfo.allocate = [](Void *allocator, const USize bytes, const USize alignment) -> Byte *
     {
-        return static_cast<FreeListAllocator *>(allocator)->allocate(bytes);
+        return static_cast<FreeListAllocator *>(allocator)->allocate(bytes, alignment);
     };
 
-    selfInfo.deallocate = [](Void *allocator, Void *pointer) -> Void
+    selfInfo.deallocate = [](Void *allocator, Byte *pointer) -> Void
     {
         static_cast<FreeListAllocator *>(allocator)->deallocate(pointer);
     };
 
-    constexpr UInt64 ROOT_MEMORY_OFFSET = INITIAL_MEMORY_OFFSET + sizeof(RBNode);
-
-    capacity = bytes + ROOT_MEMORY_OFFSET;
-    memory = parentInfo->allocate(parentInfo->allocator, capacity);
+    capacity = bytes + sizeof(RBNodePacked);
+    memory = parentInfo->allocate(parentInfo->allocator, capacity, alignof(RBNodePacked));
     freeBlocks = { memory };
-    RBNode *root = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(memory) + INITIAL_MEMORY_OFFSET);
+    RBNodePacked *root = new (memory) RBNodePacked();
     *root = {};
-    root->set_size(capacity - ROOT_MEMORY_OFFSET);
+    root->set_size(capacity - sizeof(RBNodePacked));
     freeBlocks.insert(root);
 }
 
-Void* FreeListAllocator::allocate(const UInt64 bytes)
+Byte* FreeListAllocator::allocate(const USize bytes, const USize alignment) noexcept
 {
-    RBNode *data = freeBlocks.find(bytes);
+    RBNodePacked *data = freeBlocks.find(bytes + alignment - USize(1));
     freeBlocks.remove(data);
-    RBNode *splitNode = freeBlocks.split_node(data, bytes);
+    const USize padding = alignment - (USize(data->get_memory()) % alignment);
+    data->set_padding(padding);
+    RBNodePacked *splitNode = freeBlocks.split_node(data, bytes + padding);
     if (splitNode)
     {
         freeBlocks.insert(splitNode, false);
@@ -76,49 +71,33 @@ Void* FreeListAllocator::allocate(const UInt64 bytes)
     return data->get_memory();
 }
 
-Void FreeListAllocator::deallocate(Void* pointer)
+Void FreeListAllocator::deallocate(Byte* pointer) noexcept
 {
-    if (reinterpret_cast<UInt8 *>(memory) + capacity <= reinterpret_cast<UInt8 *>(pointer))
-    {
-        SPDLOG_WARN("Pointer out of scope!");
-        return;
-    }
-    RBNode *node = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(pointer) - sizeof(RBNode));
+    assert(pointer != nullptr && "Null pointer cannot be deallocated!");
+    assert(memory + capacity > pointer && "Pointer out of scope!");
+    RBNodePacked *node = new (pointer - sizeof(RBNodePacked)) RBNodePacked();
     freeBlocks.insert(node);
 }
 
-Void FreeListAllocator::copy(const FreeListAllocator& source)
+Void FreeListAllocator::copy(const FreeListAllocator& source) noexcept
 {
-    if (this == &source)
-    {
-        SPDLOG_WARN("Attempted to copy allocator into itself. Skipping.");
-        return;
-    }
+    assert(this != &source && "Attempted to copy allocator into itself!");
+    assert(source.memory != nullptr && "Copying from an empty allocator. Destination will also be empty.");
 
-    if (source.memory == nullptr)
-    {
-        SPDLOG_WARN("Copying from an empty allocator. Destination will also be empty.");
-        return;
-    }
-
-    constexpr UInt64 ROOT_MEMORY_OFFSET = INITIAL_MEMORY_OFFSET + sizeof(RBNode);
     finalize();
     if (!source.parentInfo)
     {
-        initialize(source.capacity - ROOT_MEMORY_OFFSET);
+        initialize(source.capacity - sizeof(RBNodePacked));
     } else {
-        initialize(source.capacity - ROOT_MEMORY_OFFSET, source.parentInfo);
+        initialize(source.capacity - sizeof(RBNodePacked), source.parentInfo);
     }
 
 }
 
-Void FreeListAllocator::move(FreeListAllocator& source)
+Void FreeListAllocator::move(FreeListAllocator& source) noexcept
 {
-    if (this == &source)
-    {
-        SPDLOG_WARN("Attempted to move allocator into itself. Skipping.");
-        return;
-    }
+    assert(this != &source && "Attempted to move allocator into itself!");
+
     finalize();
     parentInfo    = source.parentInfo;
     freeBlocks    = source.freeBlocks;
@@ -128,9 +107,9 @@ Void FreeListAllocator::move(FreeListAllocator& source)
     source = {};
 }
 
-Void FreeListAllocator::print_list()
+Void FreeListAllocator::print_list() noexcept
 {
-    RBNode *node = reinterpret_cast<RBNode*>(reinterpret_cast<UInt8*>(memory) + INITIAL_MEMORY_OFFSET);
+    RBNodePacked *node = reinterpret_cast<RBNodePacked*>(memory + sizeof(RBNodePacked));
     while (node)
     {
         printf("%llu(%s)->", node->get_size(), node->is_free() ? "free" : "reserved");
@@ -139,7 +118,7 @@ Void FreeListAllocator::print_list()
     printf("\n");
 }
 
-Void FreeListAllocator::finalize()
+Void FreeListAllocator::finalize() noexcept
 {
     if (!memory)
     {
@@ -156,7 +135,7 @@ Void FreeListAllocator::finalize()
     *this = {};
 }
 
-AllocatorInfo *FreeListAllocator::get_allocator_info()
+AllocatorInfo *FreeListAllocator::get_allocator_info() noexcept
 {
     return &selfInfo;
 }

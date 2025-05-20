@@ -7,12 +7,12 @@ class StackAllocator
 private:
     AllocatorInfo selfInfo;
     AllocatorInfo *parentInfo;
-    Void          *memory;
-    UInt64        capacity;
-    UInt64        offset;
+    Byte          *memory;
+    USize          capacity;
+    USize          offset;
 
 public:
-    StackAllocator()
+    StackAllocator() noexcept
         : selfInfo({})
         , parentInfo(nullptr)
         , memory(nullptr)
@@ -20,24 +20,45 @@ public:
         , offset(0)
     {}
 
-    Void initialize(UInt64 bytes);
-    Void initialize(UInt64 bytes, AllocatorInfo *allocatorInfo);
+    Void initialize(USize bytes) noexcept;
+    Void initialize(USize bytes, AllocatorInfo *allocatorInfo) noexcept;
 
-    Void *allocate(UInt64 bytes);
+    [[nodiscard]]
+    Byte *allocate(USize bytes, USize alignment) noexcept;
     template <typename Type>
-    Type *allocate(const UInt64 count)
+    [[nodiscard]]
+    Type *allocate() noexcept
     {
-        return reinterpret_cast<Type*>(allocate(count * sizeof(Type)));
+        return new (allocate(sizeof(Type), alignof(Type))) Type();
+    }
+    template <typename Type>
+    [[nodiscard]]
+    Type *allocate(const USize count) noexcept
+    {
+        Type *mem = reinterpret_cast<Type *>(allocate(count * sizeof(Type), alignof(Type)));
+
+        for (USize i = 0; i < count; ++i)
+        {
+            new (&mem[i]) Type();
+        }
+
+        return mem;
     }
 
-    Void deallocate(UInt64 marker = 0);
-    Void deallocate(Void *pointer);
 
-    Void copy(const StackAllocator &source);
+    Void deallocate(USize marker = 0) noexcept;
+    Void deallocate(Byte *pointer) noexcept;
+    template <typename Type>
+    Void deallocate(Type *pointer) noexcept
+    {
+        deallocate(byte_cast(pointer));
+    }
 
-    Void move(StackAllocator &source);
+    Void copy(const StackAllocator &source) noexcept;
 
-    Void finalize();
+    Void move(StackAllocator &source) noexcept;
 
-    AllocatorInfo *get_allocator_info();
+    Void finalize() noexcept;
+
+    AllocatorInfo *get_allocator_info() noexcept;
 };

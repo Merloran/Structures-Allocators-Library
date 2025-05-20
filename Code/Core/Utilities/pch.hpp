@@ -4,4 +4,4 @@
 
 #include "types.hpp"
 #include "Structures/string.hpp"
-
+#include "Memory/byte.hpp"

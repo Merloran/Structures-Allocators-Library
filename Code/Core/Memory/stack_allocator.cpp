@@ -1,67 +1,60 @@
 #include "stack_allocator.hpp"
 
-Void StackAllocator::initialize(const UInt64 bytes)
+Void StackAllocator::initialize(const USize bytes) noexcept
 {
     offset = 0;
     capacity = align_memory(bytes);
-    memory = VirtualAlloc(nullptr, capacity, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    if (!memory)
-    {
-        SPDLOG_CRITICAL("Allocation failed!");
-        assert(false);
-    }
+    memory = byte_cast(VirtualAlloc(nullptr, 
+                                           capacity, 
+                                           MEM_RESERVE | MEM_COMMIT, 
+                                           PAGE_READWRITE));
+    assert(memory != nullptr && "Allocation failed!");
 
     selfInfo.allocator = this;
-    selfInfo.allocate = [](Void *allocator, UInt64 bytes) -> Void *
+    selfInfo.allocate = [](Void *allocator, USize bytes, USize alignment) -> Byte *
     {
-        return static_cast<StackAllocator *>(allocator)->allocate(bytes);
+        return static_cast<StackAllocator *>(allocator)->allocate(bytes, alignment);
     };
 
-    selfInfo.deallocate = [](Void *allocator, Void *pointer) -> Void
+    selfInfo.deallocate = [](Void *allocator, Byte *pointer) -> Void
     {
         static_cast<StackAllocator *>(allocator)->deallocate(pointer);
     };
 }
 
-Void StackAllocator::initialize(const UInt64 bytes, AllocatorInfo *allocatorInfo)
+Void StackAllocator::initialize(const USize bytes, AllocatorInfo *allocatorInfo) noexcept
 {
     offset = 0;
     parentInfo = allocatorInfo;
 
-    if (!parentInfo)
-    {
-        SPDLOG_WARN("Parent allocator is nullptr!");
-        return;
-    }
+    assert(parentInfo != nullptr && "Parent allocator is nullptr!");
 
     selfInfo.allocator = this;
-    selfInfo.allocate = [](Void *allocator, UInt64 bytes) -> Void *
+    selfInfo.allocate = [](Void *allocator, USize bytes, USize alignment) -> Byte *
     {
-        return static_cast<StackAllocator *>(allocator)->allocate(bytes);
+        return static_cast<StackAllocator *>(allocator)->allocate(bytes, alignment);
     };
 
-    selfInfo.deallocate = [](Void *allocator, Void *pointer) -> Void
+    selfInfo.deallocate = [](Void *allocator, Byte *pointer) -> Void
     {
         static_cast<StackAllocator *>(allocator)->deallocate(pointer);
     };
 
     capacity = bytes;
-    memory = parentInfo->allocate(parentInfo->allocator, capacity);
+    memory = parentInfo->allocate(parentInfo->allocator, capacity, alignof(USize));
 }
 
-Void* StackAllocator::allocate(const UInt64 bytes)
+Byte* StackAllocator::allocate(const USize bytes, const USize alignment) noexcept
 {
-    Void *address = reinterpret_cast<UInt8 *>(memory) + offset;
-    offset += bytes;
-    if (offset > capacity)
-    {
-        SPDLOG_CRITICAL("Out of memory! || CAPACITY: {} || OFFSET: {}", capacity, offset);
-        assert(false);
-    }
-    return address;
+    const USize address = USize(memory + offset);
+    const USize padding = alignment - (address % alignment);
+
+    offset += bytes + padding;
+    assert(offset <= capacity && "Out of memory!");
+    return byte_cast(address + padding);
 }
 
-Void StackAllocator::deallocate(const UInt64 marker)
+Void StackAllocator::deallocate(const USize marker) noexcept
 {
     if (marker <= offset)
     {
@@ -69,29 +62,19 @@ Void StackAllocator::deallocate(const UInt64 marker)
     }
 }
 
-Void StackAllocator::deallocate(Void* pointer)
+Void StackAllocator::deallocate(Byte* pointer) noexcept
 {
-    UInt64 marker = reinterpret_cast<UInt8 *>(pointer) - reinterpret_cast<UInt8 *>(memory);
+    USize marker = USize(pointer) - USize(memory);
     if (marker <= offset)
     {
         offset = marker;
     }
 }
 
-Void StackAllocator::copy(const StackAllocator& source)
+Void StackAllocator::copy(const StackAllocator& source) noexcept
 {
-    if (this == &source)
-    {
-        SPDLOG_WARN("Attempted to copy allocator into itself. Skipping.");
-        return;
-    }
-
-    if (source.memory == nullptr)
-    {
-        SPDLOG_WARN("Copying from an empty allocator. Destination will also be empty.");
-        return;
-    }
-
+    assert(this != &source && "Attempted to copy allocator into itself!");
+    assert(source.memory != nullptr && "Copying from an empty allocator. Destination will also be empty.");
     finalize();
 
     if (!source.parentInfo)
@@ -102,13 +85,10 @@ Void StackAllocator::copy(const StackAllocator& source)
     }
 }
 
-Void StackAllocator::move(StackAllocator& source)
+Void StackAllocator::move(StackAllocator& source) noexcept
 {
-    if (this == &source)
-    {
-        SPDLOG_WARN("Attempted to move allocator into itself. Skipping.");
-        return;
-    }
+    assert(this != &source && "Attempted to move allocator into itself!");
+
     finalize();
     parentInfo = source.parentInfo;
     memory = source.memory;
@@ -117,7 +97,7 @@ Void StackAllocator::move(StackAllocator& source)
     source = {};
 }
 
-Void StackAllocator::finalize()
+Void StackAllocator::finalize() noexcept
 {
     if (!memory)
     {
@@ -134,7 +114,7 @@ Void StackAllocator::finalize()
     *this = {};
 }
 
-AllocatorInfo *StackAllocator::get_allocator_info()
+AllocatorInfo *StackAllocator::get_allocator_info() noexcept
 {
     return &selfInfo;
 }

@@ -1,12 +1,7 @@
 #pragma once
-//Node contains compressed pointers to 4.5 bytes
+
 struct RBNode
 {
-private:
-    static constexpr UInt64 MAX_NODE_SIZE = 0xfffffffff; // 2 ^ 36, about 64 GB
-    UInt8 data[24];
-    // 4.5B (parent) | 4.5B (left) | 4.5B (right) | 4.5B (previous) | 4.5B (size) | 1b (color) | 1b (isFree) | 1b (isNextSet) | unused
-
 public:
     enum class EColor : UInt8
     {
@@ -14,31 +9,55 @@ public:
         Black
     };
 
-    RBNode *get_parent(Void* memory) const;
-    RBNode *get_left(Void *memory) const;
-    RBNode *get_right(Void *memory) const;
-    // It calculates pointer based on size
-    RBNode *get_next();
-    RBNode *get_previous(Void *memory) const;
-    UInt64 get_size() const;
-    EColor get_color() const;
-    Bool   is_free() const;
-    Void   *get_memory();
+private:
+    RBNode *parent;
+    RBNode *left;
+    RBNode *right;
+    RBNode *previous;
+    USize size;
+    EColor color;
+    Bool isFree;
+    Bool isNextSet;
 
-    Void set_parent(RBNode *parent, Void *memory);
-    Void set_left(RBNode *left, Void *memory);
-    Void set_right(RBNode *right, Void *memory);
-    // It sets isNextSet flag, false for nullptr, so remember to get_next before change size, also see get_next
-    Void set_next(RBNode *next);
-    Void set_previous(RBNode *previous, Void *memory);
-    Void set_size(UInt64 size);
-    Void set_color(EColor color);
-    Void set_free(Bool isFree);
+public:
+    RBNode()
+        : parent(nullptr)
+        , left(nullptr)
+        , right(nullptr)
+        , previous(nullptr)
+        , size(0)
+        , color(EColor::Black)
+        , isFree(true)
+        , isNextSet(false)
+    {}
+
+    [[nodiscard]]
+    RBNode *get_parent() const noexcept;
+    [[nodiscard]]
+    RBNode *get_left() const noexcept;
+    [[nodiscard]]
+    RBNode *get_right() const noexcept;
+    [[nodiscard]]
+    RBNode *get_next() const noexcept;
+    [[nodiscard]]
+    RBNode *get_previous() const noexcept;
+    [[nodiscard]]
+    USize   get_size() const noexcept;
+    [[nodiscard]]
+    EColor  get_color() const noexcept;
+    [[nodiscard]]
+    Bool    is_free() const noexcept;
+    [[nodiscard]]
+    Byte   *get_memory() const noexcept;
+
+    Void set_parent(RBNode *nodeParent) noexcept;
+    Void set_left(RBNode *leftChild) noexcept;
+    Void set_right(RBNode *rightChild) noexcept;
+    Void set_next(const RBNode *nextNode) noexcept;
+    Void set_previous(RBNode *previousNode) noexcept;
+    Void set_size(USize nodeSize) noexcept;
+    Void set_color(EColor nodeColor) noexcept;
+    Void set_free(Bool isNodeFree) noexcept;
 
     Void reset();
-
-    RBNode()
-    {
-        memset(data, 0, 24);
-    }
 };

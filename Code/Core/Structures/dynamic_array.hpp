@@ -1,14 +1,14 @@
 #pragma once
 #include "Memory/memory_utils.hpp"
-//TODO: maybe add support for allocator independent data
+
 template <typename Type>
 class DynamicArray
 {
 private:
-    static constexpr UInt64 EXPANSION_SIZE = 32;
+    static constexpr USize EXPANSION_SIZE = 32;
     Type *elements;
     AllocatorInfo *allocatorInfo;
-    UInt64 capacity, size;
+    USize capacity, size;
 
 public:
     DynamicArray() noexcept
@@ -23,54 +23,54 @@ public:
         allocatorInfo = allocator;
     }
 
-    Void initialize(const UInt64 initialCapacity, 
+    Void initialize(const USize initialCapacity, 
                     AllocatorInfo *allocator = AllocatorInfo::get_default_allocator())
     {
         allocatorInfo = allocator;
 
-        if (!allocatorInfo)
-        {
-            SPDLOG_WARN("Allocator is nullptr!");
-            return;
-        }
+        assert(allocatorInfo != nullptr && "Allocator is nullptr!");
 
         capacity = initialCapacity;
         size = 0;
-        elements = static_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator, capacity * sizeof(Type)));
+        elements = reinterpret_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator, 
+                                                                    capacity * sizeof(Type), 
+                                                                    alignof(Type)));
+        fill(Type());
     }
 
-    Void initialize(const UInt64 initialSize, 
+    Void initialize(const USize initialSize, 
                     const Type& initialElement, 
                     AllocatorInfo *allocator = AllocatorInfo::get_default_allocator())
     {
         allocatorInfo = allocator;
 
-        if (!allocatorInfo)
-        {
-            SPDLOG_WARN("Allocator is nullptr!");
-            return;
-        }
+        assert(allocatorInfo != nullptr && "Allocator is nullptr!");
 
         capacity = initialSize;
         size = initialSize;
-        elements = static_cast<Type*>(allocatorInfo->allocate(allocatorInfo->allocator, capacity * sizeof(Type)));
+        elements = reinterpret_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator,
+                                                                    capacity * sizeof(Type), 
+                                                                    alignof(Type)));
         fill(initialElement);
     }
 
-    Void reserve(const UInt64 newCapacity)
+    Void reserve(const USize newCapacity)
     {
         if (newCapacity <= capacity)
         {
             return;
         }
 
-        Type *newElements = static_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator, newCapacity * sizeof(Type)));
+        Type *newElements = reinterpret_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator,
+                                                                             newCapacity * sizeof(Type), 
+                                                                             alignof(Type)));
         if constexpr (requires(Type obj) { obj.move(std::declval<Type>()); })
         {
             Type *data = newElements;
             const Type *sourceData = elements;
-            for (UInt64 i = size; i > 0; --i, ++data, ++sourceData)
+            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
             {
+                new (data) Type();
                 data->move(*sourceData);
             }
         }
@@ -78,22 +78,41 @@ public:
         {
             Type *data = newElements;
             const Type *sourceData = elements;
-            for (UInt64 i = size; i > 0; --i, ++data, ++sourceData)
+            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
             {
+                new (data) Type();
                 data->copy(*sourceData);
             }
         }
         else if constexpr (std::is_trivially_copyable_v<Type>)
         {
-            memcpy(newElements, elements, size * sizeof(Type));
-        } else {
             Type *data = newElements;
-            const Type *sourceData = elements;
-            for (UInt64 i = size; i > 0; --i, ++data, ++sourceData)
+            for (USize i = 0; i < size; ++i, ++data)
             {
+                new (data) Type();
+            }
+            memcpy(newElements, elements, size * sizeof(Type));
+        }
+        else if constexpr (std::is_copy_constructible_v<Type>)
+        {
+            Type *data = elements;
+            const Type *sourceData = elements;
+            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
+            {
+                new (data) Type(*sourceData);
+            }
+        }
+        else if constexpr (std::is_copy_assignable_v<Type>)
+        {
+            Type *data = elements;
+            const Type *sourceData = elements;
+            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
+            {
+                new (data) Type();
                 *data = *sourceData;
             }
         }
+
         if (elements)
         {
             allocatorInfo->deallocate(allocatorInfo->allocator, elements);
@@ -102,7 +121,7 @@ public:
         capacity = newCapacity;
     }
 
-    Void resize(const UInt64 newSize, const Type &initialElement = {})
+    Void resize(const USize newSize, const Type &initialElement = {})
     {
         if (newSize == size)
         {
@@ -111,13 +130,16 @@ public:
 
         if (newSize > capacity)
         {
-            Type *newElements = static_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator, newSize * sizeof(Type)));
+            Type *newElements = reinterpret_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator,
+                                                                                 newSize * sizeof(Type),
+                                                                                 alignof(Type)));
             if constexpr (requires(Type obj) { obj.move(std::declval<Type>()); })
             {
                 Type *data = newElements;
                 const Type *sourceData = elements;
-                for (UInt64 i = size; i > 0; --i, ++data, ++sourceData)
+                for (USize i = 0; i < size; ++i, ++data, ++sourceData)
                 {
+                    new (data) Type();
                     data->move(*sourceData);
                 }
             }
@@ -125,34 +147,53 @@ public:
             {
                 Type *data = newElements;
                 const Type *sourceData = elements;
-                for (UInt64 i = size; i > 0; --i, ++data, ++sourceData)
+                for (USize i = 0; i < size; ++i, ++data, ++sourceData)
                 {
+                    new (data) Type();
                     data->copy(*sourceData);
                 }
             }
             else if constexpr (std::is_trivially_copyable_v<Type>)
             {
-                memcpy(newElements, elements, size * sizeof(Type));
-            } else {
                 Type *data = newElements;
-                const Type *sourceData = elements;
-                for (UInt64 i = size; i > 0; --i, ++data, ++sourceData)
+                for (USize i = 0; i < size; ++i, ++data)
                 {
+                    new (data) Type();
+                }
+                memcpy(newElements, elements, size * sizeof(Type));
+            }
+            else if constexpr (std::is_copy_constructible_v<Type>)
+            {
+                Type *data = elements;
+                const Type *sourceData = elements;
+                for (USize i = 0; i < size; ++i, ++data, ++sourceData)
+                {
+                    new (data) Type(*sourceData);
+                }
+            }
+            else if constexpr (std::is_copy_assignable_v<Type>)
+            {
+                Type *data = elements;
+                const Type *sourceData = elements;
+                for (USize i = 0; i < size; ++i, ++data, ++sourceData)
+                {
+                    new (data) Type();
                     *data = *sourceData;
                 }
             }
+
             if (elements)
             {
                 allocatorInfo->deallocate(allocatorInfo->allocator, elements);
             }
-            const UInt64 oldSize = size;
+            const USize oldSize = size;
             size = newSize;
             capacity = newSize;
             fill(oldSize, size, initialElement);
         }
         else if (newSize > size)
         {
-            const UInt64 oldSize = size;
+            const USize oldSize = size;
             size = newSize;
             fill(oldSize, size, initialElement);
         } else { // newSize < size
@@ -203,18 +244,18 @@ public:
     }
 
     [[nodiscard]]
-    UInt64 get_capacity() const noexcept
+    USize get_capacity() const noexcept
     {
         return capacity;
     }
 
     [[nodiscard]]
-    UInt64 get_size() const noexcept
+    USize get_size() const noexcept
     {
         return size;
     }
 
-    Type &operator[](UInt64 index) noexcept
+    Type &operator[](USize index) noexcept
     {
         assert(index < size);
         return elements[index];
@@ -252,10 +293,7 @@ public:
 
     Void move(DynamicArray &source) noexcept
     {
-        if (&source == this)
-        {
-            return;
-        }
+        assert(&source != this && "Tried to move dynamic array into itself!");
 
         finalize();
         elements      = source.elements;
@@ -268,10 +306,7 @@ public:
 
     Void copy(const DynamicArray &source) noexcept
     {
-        if (&source == this)
-        {
-            return;
-        }
+        assert(&source != this && "Tried to copy dynamic array into itself!");
 
         finalize();
         initialize(source.capacity, source.allocatorInfo);
@@ -282,19 +317,37 @@ public:
         {
             Type *data = elements;
             const Type *sourceData = source.elements;
-            for (UInt64 i = size; i > 0; --i, ++data, ++sourceData)
+            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
             {
+                new (data) Type();
                 data->copy(*sourceData);
             }
         }
         else if constexpr (std::is_trivially_copyable_v<Type>)
         {
+            Type *data = elements;
+            for (USize i = 0; i < size; ++i, ++data)
+            {
+                new (data) Type();
+            }
             memcpy(elements, source.elements, size * sizeof(Type));
-        } else {
+        }
+        else if constexpr (std::is_copy_constructible_v<Type>)
+        {
             Type *data = elements;
             const Type *sourceData = source.elements;
-            for (UInt64 i = size; i > 0; --i, ++data, ++sourceData)
+            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
             {
+                new (data) Type(*sourceData);
+            }
+        }
+        else if constexpr (std::is_copy_assignable_v<Type>)
+        {
+            Type *data = elements;
+            const Type *sourceData = source.elements;
+            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
+            {
+                new (data) Type();
                 *data = *sourceData;
             }
         }
@@ -305,39 +358,63 @@ public:
         if constexpr (requires(Type obj) { obj.copy(Type()); })
         {
             Type *data = elements;
-            for (UInt64 i = size; i > 0; --i, ++data)
+            for (USize i = 0; i < size; ++i, ++data)
             {
+                new (data) Type();
                 data->copy(value);
             }
-        } else {
+        }
+        else if constexpr (std::is_copy_constructible_v<Type>)
+        {
             Type *data = elements;
-            for (UInt64 i = size; i > 0; --i, ++data)
+            for (USize i = 0; i < size; ++i, ++data)
             {
+                new (data) Type(value);
+            }
+        }
+        else if constexpr (std::is_copy_assignable_v<Type>)
+        {
+            Type *data = elements;
+            for (USize i = 0; i < size; ++i, ++data)
+            {
+                new (data) Type();
                 *data = value;
             }
         }
     }
 
-    Void fill(UInt64 begin, const UInt64 end, const Type &value) noexcept
+    Void fill(USize begin, const USize end, const Type &value) noexcept
     {
         assert(begin < size && end <= size);
         if constexpr (requires(Type obj) { obj.copy(Type()); })
         {
             Type *data = elements + begin;
-            for (UInt64 i = end; i > begin; --i, ++data)
+            for (USize i = begin; i < end; ++i, ++data)
             {
+                new (data) Type();
                 data->copy(value);
             }
-        } else {
+        }
+        else if constexpr (std::is_copy_constructible_v<Type>)
+        {
             Type *data = elements + begin;
-            for (UInt64 i = end; i > begin; --i, ++data)
+            for (USize i = begin; i < end; ++i, ++data)
             {
+                new (data) Type(value);
+            }
+        }
+        else if constexpr (std::is_copy_assignable_v<Type>)
+        {
+            Type *data = elements + begin;
+            for (USize i = begin; i < end; ++i, ++data)
+            {
+                new (data) Type();
                 *data = value;
             }
         }
     }
 
-    Void swap(UInt64 left, UInt64 right) noexcept
+    Void swap(USize left, USize right) noexcept
     {
         assert(left < size && right < size);
         const Type &temporary = elements[left];
@@ -350,9 +427,9 @@ public:
     {
         if constexpr (std::is_trivial_v<Type> && sizeof(Type) == 1)
         {
-            return std::memchr(elements, value, size) != nullptr;
+            return memchr(elements, value, size) != nullptr;
         } else {
-            for (UInt64 i = 0; i < size; ++i)
+            for (USize i = 0; i < size; ++i)
             {
                 if (elements[i] == value)
                 {
@@ -370,7 +447,7 @@ public:
     }
 
     [[nodiscard]]
-    inline const Type &operator[](UInt64 index) const noexcept
+    const Type &operator[](USize index) const noexcept
     {
         assert(index < size);
         return elements[index];
@@ -416,7 +493,7 @@ public:
         if constexpr (requires(Type obj) { obj.finalize(); })
         {
             Type *data = elements;
-            for (UInt64 i = size; i > 0; --i, ++data)
+            for (USize i = 0; i < size; ++i, ++data)
             {
                 data->finalize();
             }
@@ -424,7 +501,7 @@ public:
         else if constexpr (!std::is_trivially_destructible_v<Type>) 
         {
             Type *data = elements;
-            for (UInt64 i = size; i > 0; --i, ++data)
+            for (USize i = 0; i < size; ++i, ++data)
             {
                 data->~Type();
             }

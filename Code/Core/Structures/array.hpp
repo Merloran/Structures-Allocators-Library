@@ -1,6 +1,6 @@
 #pragma once
 
-template <typename Type, UInt64 size>
+template <typename Type, USize size>
 class Array
 {
 private:
@@ -16,21 +16,19 @@ public:
         fill(value);
     }
     
-    template <typename... Args,
-              std::enable_if_t<(sizeof...(Args) == size) && 
-                               (std::is_same_v<std::decay_t<Args>, Type> && 
-                                ...), Int32> = 0>
+    template <typename... Args>
+    requires (sizeof...(Args) == size) && (std::same_as<std::decay_t<Args>, Type> && ...)
     constexpr Array(const Args&... values) noexcept
     : elements{ static_cast<Type>(values)... }
     {}
 
     [[nodiscard]]
-    constexpr UInt64 get_size() const noexcept
+    consteval USize get_size() const noexcept
     {
         return size;
     }
 
-    Type &operator[](UInt64 index) noexcept
+    Type &operator[](USize index) noexcept
     {
         assert(index < size);
         return elements[index];
@@ -69,13 +67,13 @@ public:
     constexpr Void fill(const Type &value) noexcept
     {
         Type *data = elements;
-        for (UInt64 i = size; i > 0; --i, ++data)
+        for (USize i = size; i > 0; --i, ++data)
         {
             *data = value;
         }
     }
 
-    Void swap(UInt64 left, UInt64 right) noexcept
+    Void swap(USize left, USize right) noexcept
     {
         assert(left < size && right < size);
         const Type &temporary = elements[left];
@@ -86,7 +84,7 @@ public:
     [[nodiscard]]
     constexpr Bool contains(const Type &value) const noexcept
     {
-        for (UInt64 i = 0; i < size; ++i)
+        for (USize i = 0; i < size; ++i)
         {
             if (elements[i] == value)
             {
@@ -97,7 +95,7 @@ public:
     }
 
     [[nodiscard]]
-    constexpr Type &operator[](UInt64 index) const noexcept
+    constexpr Type &operator[](USize index) const noexcept
     {
         assert(index < size);
         return elements[index];

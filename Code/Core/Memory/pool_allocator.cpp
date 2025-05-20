@@ -1,125 +1,94 @@
 #include "pool_allocator.hpp"
 
-Void PoolAllocator::initialize(const UInt64 count, const UInt64 size)
+Void PoolAllocator::initialize(const USize count, const USize size) noexcept
 {
     blockSize = size;
     capacity = align_memory(count * size);
-    memory = VirtualAlloc(nullptr, capacity, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    if (!memory)
-    {
-        SPDLOG_CRITICAL("Allocation failed!");
-        assert(false);
-    }
+    memory = byte_cast(VirtualAlloc(nullptr, 
+                                           capacity, 
+                                           MEM_RESERVE | MEM_COMMIT, 
+                                           PAGE_READWRITE));
+
+    assert(memory != nullptr && "Allocation failed!");
 
     selfInfo.allocator = this;
-    selfInfo.allocate = [](Void *allocator, UInt64 bytes) -> Void *
+    selfInfo.allocate = [](Void *allocator, USize bytes, USize alignment) -> Byte *
     {
-        return static_cast<PoolAllocator *>(allocator)->allocate(bytes);
+        return static_cast<PoolAllocator *>(allocator)->allocate(bytes, alignment);
     };
 
-    selfInfo.deallocate = [](Void *allocator, Void *pointer) -> Void
+    selfInfo.deallocate = [](Void *allocator, Byte *pointer) -> Void
     {
         static_cast<PoolAllocator *>(allocator)->deallocate(pointer);
     };
 
-    freeList = static_cast<PoolBlock *>(memory);
+    freeList = new (memory) PoolBlock();
     PoolBlock *current = freeList;
-    for (UInt64 i = 0; i < count; ++i)
+    for (USize i = 0; i < count; ++i)
     {
-        current->next = reinterpret_cast<PoolBlock *>(reinterpret_cast<UInt8 *>(memory) + i * blockSize);
+        current->next = new (memory + i * blockSize) PoolBlock();
         current = current->next;
     }
     current->next = nullptr;
 }
 
-Void PoolAllocator::initialize(const UInt64 count, const UInt64 size, AllocatorInfo *allocatorInfo)
+Void PoolAllocator::initialize(const USize count, const USize size, AllocatorInfo *allocatorInfo) noexcept
 {
     blockSize = size;
     parentInfo = allocatorInfo;
 
-    if (!parentInfo)
-    {
-        SPDLOG_WARN("Parent allocator is nullptr!");
-        return;
-    }
+    assert(parentInfo != nullptr && "Parent allocator is nullptr!");
 
     selfInfo.allocator = this;
-    selfInfo.allocate = [](Void *allocator, UInt64 bytes) -> Void *
+    selfInfo.allocate = [](Void *allocator, USize bytes, USize alignment) -> Byte *
     {
-        return static_cast<PoolAllocator *>(allocator)->allocate(bytes);
+        return static_cast<PoolAllocator *>(allocator)->allocate(bytes, alignment);
     };
 
-    selfInfo.deallocate = [](Void *allocator, Void *pointer) -> Void
+    selfInfo.deallocate = [](Void *allocator, Byte *pointer) -> Void
     {
         static_cast<PoolAllocator *>(allocator)->deallocate(pointer);
     };
 
     capacity = count * size;
-    memory = parentInfo->allocate(parentInfo->allocator, capacity);
+    memory = parentInfo->allocate(parentInfo->allocator, capacity, alignof(PoolBlock));
 
-    freeList = static_cast<PoolBlock *>(memory);
+    freeList = new (memory) PoolBlock();
     PoolBlock *current = freeList;
-    for (UInt64 i = 0; i < count; ++i)
+    for (USize i = 0; i < count; ++i)
     {
-        current->next = reinterpret_cast<PoolBlock *>(reinterpret_cast<UInt8 *>(memory) + i * blockSize);
+        current->next = new (memory + i * blockSize) PoolBlock();
         current = current->next;
     }
     current->next = nullptr;
 }
 
-Void* PoolAllocator::allocate(const UInt64 bytes)
+Byte* PoolAllocator::allocate(const USize bytes, [[maybe_unused]] const USize alignment) noexcept
 {
-    if (bytes > blockSize)
-    {
-        SPDLOG_CRITICAL("Requested too much memory! || Requested: {} || Max: {}", bytes, blockSize);
-        assert(false);
-        return nullptr;
-    }
+    assert(bytes <= blockSize && "Requested too much memory!");
+    assert(freeList != nullptr && "Out of memory!");
 
-    if (!freeList)
-    {
-        SPDLOG_CRITICAL("Out of memory! || CAPACITY: {}", capacity);
-        assert(false);
-        return nullptr;
-    }
-    Void *address = freeList;
+    Byte *address = byte_cast(freeList);
     freeList = freeList->next;
     return address;
 }
 
-Void PoolAllocator::deallocate(Void* pointer)
+Void PoolAllocator::deallocate(Byte *pointer) noexcept
 {
-    const UInt64 offset = reinterpret_cast<UInt8 *>(pointer) - reinterpret_cast<UInt8 *>(memory);
-    if (offset >= capacity)
-    {
-        SPDLOG_WARN("Pointer out of scope!");
-        return;
-    }
+    const USize offset = USize(pointer) - USize(memory);
+    assert(offset < capacity && "Pointer out of scope!");
 
-    UInt64 pointerAlignment = (reinterpret_cast<UInt8 *>(pointer) - reinterpret_cast<UInt8 *>(memory)) % blockSize;
-    if (pointerAlignment != 0)
-    {
-        pointer = reinterpret_cast<Void *>(reinterpret_cast<UInt8 *>(pointer) - pointerAlignment);
-    }
+    pointer -= offset % blockSize;
 
-    PoolBlock *freeBlock = static_cast<PoolBlock *>(pointer);
+    PoolBlock *freeBlock = new (pointer) PoolBlock();
     freeBlock->next = freeList;
     freeList = freeBlock;
 }
 
-Void PoolAllocator::copy(const PoolAllocator& source)
+Void PoolAllocator::copy(const PoolAllocator& source) noexcept
 {
-    if (this == &source)
-    {
-        SPDLOG_WARN("Attempted to copy allocator into itself. Skipping.");
-        return;
-    }
-
-    if (source.memory == nullptr)
-    {
-        SPDLOG_WARN("Copying from an empty allocator. Destination will also be empty.");
-        return;
-    }
+    assert(this != &source && "Attempted to copy allocator into itself!");
+    assert(source.memory != nullptr && "Copying from an empty allocator. Destination will also be empty.");
 
     finalize();
     if (!source.parentInfo)
@@ -130,13 +99,10 @@ Void PoolAllocator::copy(const PoolAllocator& source)
     }
 }
 
-Void PoolAllocator::move(PoolAllocator& source)
+Void PoolAllocator::move(PoolAllocator& source) noexcept
 {
-    if (this == &source)
-    {
-        SPDLOG_WARN("Attempted to move allocator into itself. Skipping.");
-        return;
-    }
+    assert(this != &source && "Attempted to move allocator into itself!");
+
     finalize();
     parentInfo    = source.parentInfo;
     memory        = source.memory;
@@ -146,7 +112,7 @@ Void PoolAllocator::move(PoolAllocator& source)
     source = {};
 }
 
-Void PoolAllocator::finalize()
+Void PoolAllocator::finalize() noexcept
 {
     if (!memory)
     {
@@ -163,7 +129,7 @@ Void PoolAllocator::finalize()
     *this = {};
 }
 
-AllocatorInfo *PoolAllocator::get_allocator_info()
+AllocatorInfo *PoolAllocator::get_allocator_info() noexcept
 {
     return &selfInfo;
 }

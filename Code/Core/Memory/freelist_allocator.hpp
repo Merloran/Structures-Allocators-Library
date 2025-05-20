@@ -6,41 +6,59 @@
 class FreeListAllocator
 {
 private:
-    static constexpr UInt64 INITIAL_MEMORY_OFFSET = 8_B;
-    RBTree        freeBlocks;
-    AllocatorInfo selfInfo;
+    RBTree         freeBlocks;
+    AllocatorInfo  selfInfo;
     AllocatorInfo *parentInfo;
-    Void          *memory;
-    UInt64        capacity;
+    Byte          *memory;
+    USize          capacity;
 
 public:
-    FreeListAllocator()
+    FreeListAllocator() noexcept
         : selfInfo({})
         , parentInfo(nullptr)
         , memory(nullptr)
         , capacity(0)
     {}
 
-    Void initialize(UInt64 bytes);
-    Void initialize(UInt64 bytes, AllocatorInfo *allocatorInfo);
+    Void initialize(USize bytes) noexcept;
+    Void initialize(USize bytes, AllocatorInfo *allocatorInfo) noexcept;
 
-    Void *allocate(UInt64 bytes);
+    Byte *allocate(USize bytes, USize alignment) noexcept;
     template <typename Type>
-    Type *allocate(const UInt64 count)
+    [[nodiscard]]
+    Type *allocate() noexcept
     {
-        return reinterpret_cast<Type *>(allocate(count * sizeof(Type)));
+        return new (allocate(sizeof(Type), alignof(Type))) Type();
+    }
+    template <typename Type>
+    [[nodiscard]]
+    Type *allocate(const USize count) noexcept
+    {
+        Type *mem = reinterpret_cast<Type *>(allocate(count * sizeof(Type), alignof(Type)));
+
+        for (USize i = 0; i < count; ++i)
+        {
+            new (&mem[i]) Type();
+        }
+
+        return mem;
     }
 
-    Void deallocate(Void *pointer);
+    Void deallocate(Byte *pointer) noexcept;
+    template <typename Type>
+    Void deallocate(Type *pointer) noexcept
+    {
+        deallocate(byte_cast(pointer));
+    }
 
     //Copy size and optionally takes same parent allocator
-    Void copy(const FreeListAllocator &source);
+    Void copy(const FreeListAllocator &source) noexcept;
 
-    Void move(FreeListAllocator &source);
+    Void move(FreeListAllocator &source) noexcept;
 
-    Void print_list();
+    Void print_list() noexcept;
 
-    Void finalize();
+    Void finalize() noexcept;
 
-    AllocatorInfo *get_allocator_info();
+    AllocatorInfo *get_allocator_info() noexcept;
 };

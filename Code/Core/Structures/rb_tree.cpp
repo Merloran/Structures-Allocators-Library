@@ -1,16 +1,8 @@
 #include "rb_tree.hpp"
-
-#if 0 & defined(_DEBUG) // erase 0 & for better debug view, but results will be a bit different because of bigger node size
-#include "rb_node_debug.hpp"
-using RBNode = RBNodeDebug;
-#else
-#include "rb_node.hpp"
-#endif
-
-
+#include "rb_node_packed.hpp"
 #include <magic_enum.hpp>
 
-Void RBTree::insert(RBNode* node, Bool shouldCoalesce)
+Void RBTree::insert(RBNodePacked* node, const Bool shouldCoalesce) noexcept
 {
     if (!node)
     {
@@ -18,9 +10,9 @@ Void RBTree::insert(RBNode* node, Bool shouldCoalesce)
         return;
     }
     node->reset();
-    RBNode *parent = nullptr;
-    RBNode *current = root;
-    const UInt64 nodeSize = node->get_size();
+    RBNodePacked *parent = nullptr;
+    RBNodePacked *current = root;
+    const USize nodeSize = node->get_size();
     while (current != nullptr)
     {
         parent = current;
@@ -49,7 +41,7 @@ Void RBTree::insert(RBNode* node, Bool shouldCoalesce)
     }
 }
 
-Void RBTree::remove(RBNode* node)
+Void RBTree::remove(RBNodePacked* node) noexcept
 {
     node->set_free(false);
 
@@ -58,9 +50,9 @@ Void RBTree::remove(RBNode* node)
         return;
     }
 
-    RBNode *x;
-    RBNode *y = node;
-    RBNode::EColor yOriginalColor = y->get_color();
+    RBNodePacked *x;
+    RBNodePacked *y = node;
+    RBNodePacked::EColor yOriginalColor = y->get_color();
     if (!node->get_left(memory))
     {
         x = node->get_right(memory);
@@ -82,33 +74,37 @@ Void RBTree::remove(RBNode* node)
             }
         } else {
             transplant(y, x);
-            RBNode *right = node->get_right(memory);
+            RBNodePacked *right = node->get_right(memory);
             y->set_right(right, memory);
             right->set_parent(y, memory);
         }
         transplant(node, y);
-        RBNode *left = node->get_left(memory);
+        RBNodePacked *left = node->get_left(memory);
         y->set_left(left, memory);
         left->set_parent(y, memory);
         y->set_color(node->get_color());
     }
 
-    if (yOriginalColor == RBNode::EColor::Black) 
+    if (yOriginalColor == RBNodePacked::EColor::Black) 
     {
         fix_remove(x);
     }
 }
 
-RBNode* RBTree::split_node(RBNode* node, UInt64 requestedBytes) const
+RBNodePacked* RBTree::split_node(RBNodePacked* node, const USize requestedBytes) const noexcept
 {
-    if (node->get_size() - requestedBytes <= sizeof(RBNode))
+    if (node->get_size() - requestedBytes <= sizeof(RBNodePacked))
     {
         return nullptr;
     }
-    RBNode *splitNode = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(node->get_memory()) + requestedBytes);
-    RBNode *next = node->get_next();
-    splitNode->set_size(node->get_size() - (requestedBytes + sizeof(RBNode)));
-    node->set_size(requestedBytes);
+
+    Byte *nodeEnd = node->get_memory() + requestedBytes;
+    const USize splitNodePadding = sizeof(RBNodePacked) - (USize(nodeEnd) % sizeof(RBNodePacked));
+
+    RBNodePacked *splitNode = new (node->get_memory() + requestedBytes + splitNodePadding) RBNodePacked();
+    RBNodePacked *next = node->get_next();
+    splitNode->set_size(node->get_size() - (requestedBytes + sizeof(RBNodePacked)));
+    node->set_size(requestedBytes + splitNodePadding);
     splitNode->set_free(true);
     splitNode->set_previous(node, memory);
     splitNode->set_next(next);
@@ -120,11 +116,11 @@ RBNode* RBTree::split_node(RBNode* node, UInt64 requestedBytes) const
     return splitNode;
 }
 
-Void RBTree::coalesce(RBNode* node)
+Void RBTree::coalesce(RBNodePacked* node) noexcept
 {
-    RBNode *current = node;
-    RBNode *previous = current->get_previous(memory);
-    RBNode *next = current->get_next();
+    RBNodePacked *current = node;
+    RBNodePacked *previous = current->get_previous(memory);
+    RBNodePacked *next = current->get_next();
     Bool isNextFree = false, isPreviousFree = false;
 
     if (previous)
@@ -146,7 +142,7 @@ Void RBTree::coalesce(RBNode* node)
     if (isPreviousFree)
     {
         remove(previous);
-        const UInt64 exactNodeSize = current->get_size() + sizeof(RBNode);
+        const USize exactNodeSize = current->get_size() + sizeof(RBNodePacked);
         previous->set_size(previous->get_size() + exactNodeSize);
         previous->set_next(next);
         current = previous;
@@ -159,7 +155,7 @@ Void RBTree::coalesce(RBNode* node)
     if (isNextFree)
     {
         remove(next);
-        const UInt64 exactNodeSize = next->get_size() + sizeof(RBNode);
+        const USize exactNodeSize = next->get_size() + sizeof(RBNodePacked);
         current->set_size(current->get_size() + exactNodeSize);
         next = next->get_next();
         current->set_next(next);
@@ -172,10 +168,10 @@ Void RBTree::coalesce(RBNode* node)
     insert(current, false);
 }
 
-RBNode* RBTree::find(const UInt64 size) const
+RBNodePacked* RBTree::find(const USize size) const noexcept
 {
-    RBNode *current = root;
-    RBNode *bestFit = nullptr;
+    RBNodePacked *current = root;
+    RBNodePacked *bestFit = nullptr;
 
     while (current)
     {
@@ -196,7 +192,7 @@ RBNode* RBTree::find(const UInt64 size) const
     return bestFit;
 }
 
-Void RBTree::print_tree()
+Void RBTree::print_tree() noexcept
 {
     if (!root)
     {
@@ -208,16 +204,16 @@ Void RBTree::print_tree()
     print_helper(root, "", true);
 }
 
-Void RBTree::clear()
+Void RBTree::clear() noexcept
 {
     root = nullptr;
     memory = nullptr;
 }
 
-Bool RBTree::contains(const RBNode* node) const
+Bool RBTree::contains(const RBNodePacked* node) const noexcept
 {
-    RBNode *current = root;
-    const UInt64 size = node->get_size();
+    RBNodePacked *current = root;
+    const USize size = node->get_size();
     while (current)
     {
         if (current->get_size() > size)
@@ -235,18 +231,18 @@ Bool RBTree::contains(const RBNode* node) const
     return false;
 }
 
-Void RBTree::rotate_left(RBNode* node)
+Void RBTree::rotate_left(RBNodePacked* node) noexcept
 {
-    RBNode *child = node->get_right(memory);
+    RBNodePacked *child = node->get_right(memory);
 
-    RBNode *right = child->get_left(memory);
+    RBNodePacked *right = child->get_left(memory);
     node->set_right(right, memory);
     if (right)
     {
         right->set_parent(node, memory);
     }
 
-    RBNode *parent = node->get_parent(memory);
+    RBNodePacked *parent = node->get_parent(memory);
     child->set_parent(parent, memory);
     if (!parent)
     {
@@ -262,10 +258,10 @@ Void RBTree::rotate_left(RBNode* node)
     node->set_parent(child, memory);
 }
 
-Void RBTree::rotate_right(RBNode* node)
+Void RBTree::rotate_right(RBNodePacked* node) noexcept
 {
-    RBNode *child = node->get_left(memory);
-    RBNode *left = child->get_right(memory);
+    RBNodePacked *child = node->get_left(memory);
+    RBNodePacked *left = child->get_right(memory);
     node->set_left(left, memory);
 
     if (left)
@@ -273,7 +269,7 @@ Void RBTree::rotate_right(RBNode* node)
         left->set_parent(node, memory);
     }
 
-    RBNode *parent = node->get_parent(memory);
+    RBNodePacked *parent = node->get_parent(memory);
     child->set_parent(parent, memory);
     if (!parent)
     {
@@ -289,9 +285,9 @@ Void RBTree::rotate_right(RBNode* node)
     node->set_parent(child, memory);
 }
 
-Void RBTree::transplant(const RBNode* u, RBNode* v)
+Void RBTree::transplant(const RBNodePacked* u, RBNodePacked* v) noexcept
 {
-    RBNode *parent = u->get_parent(memory);
+    RBNodePacked *parent = u->get_parent(memory);
     if (!parent)
     {
         root = v;
@@ -309,10 +305,10 @@ Void RBTree::transplant(const RBNode* u, RBNode* v)
     }
 }
 
-RBNode* RBTree::get_min(RBNode* node) const
+RBNodePacked* RBTree::get_min(RBNodePacked* node) const noexcept
 {
-    RBNode *current = node;
-    RBNode *left = current->get_left(memory);
+    RBNodePacked *current = node;
+    RBNodePacked *left = current->get_left(memory);
     while (left)
     {
         current = left;
@@ -321,22 +317,22 @@ RBNode* RBTree::get_min(RBNode* node) const
     return current;
 }
 
-Void RBTree::fix_insert(const RBNode* node)
+Void RBTree::fix_insert(const RBNodePacked* node) noexcept
 {
     while (node != root &&
-           node->get_color() == RBNode::EColor::Red &&
-           node->get_parent(memory)->get_color() == RBNode::EColor::Red)
+           node->get_color() == RBNodePacked::EColor::Red &&
+           node->get_parent(memory)->get_color() == RBNodePacked::EColor::Red)
     {
-        RBNode* parent = node->get_parent(memory);
-        RBNode* grandparent = parent->get_parent(memory);
+        RBNodePacked* parent = node->get_parent(memory);
+        RBNodePacked* grandparent = parent->get_parent(memory);
         if (parent == grandparent->get_left(memory))
         {
-            RBNode *uncle = grandparent->get_right(memory);
-            if (uncle && uncle->get_color() == RBNode::EColor::Red) 
+            RBNodePacked *uncle = grandparent->get_right(memory);
+            if (uncle && uncle->get_color() == RBNodePacked::EColor::Red) 
             {
-                grandparent->set_color(RBNode::EColor::Red);
-                parent->set_color(RBNode::EColor::Black);
-                uncle->set_color(RBNode::EColor::Black);
+                grandparent->set_color(RBNodePacked::EColor::Red);
+                parent->set_color(RBNodePacked::EColor::Black);
+                uncle->set_color(RBNodePacked::EColor::Black);
                 node = grandparent;
             } else {
                 if (node == parent->get_right(memory))
@@ -346,18 +342,18 @@ Void RBTree::fix_insert(const RBNode* node)
                     parent = node->get_parent(memory);
                 }
                 rotate_right(grandparent);
-                const RBNode::EColor tempColor = parent->get_color();
+                const RBNodePacked::EColor tempColor = parent->get_color();
                 parent->set_color(grandparent->get_color());
                 grandparent->set_color(tempColor);
                 node = parent;
             }
         } else {
-            RBNode *uncle = grandparent->get_left(memory);
-            if (uncle && uncle->get_color() == RBNode::EColor::Red) 
+            RBNodePacked *uncle = grandparent->get_left(memory);
+            if (uncle && uncle->get_color() == RBNodePacked::EColor::Red) 
             {
-                grandparent->set_color(RBNode::EColor::Red);
-                parent->set_color(RBNode::EColor::Black);
-                uncle->set_color(RBNode::EColor::Black);
+                grandparent->set_color(RBNodePacked::EColor::Red);
+                parent->set_color(RBNodePacked::EColor::Black);
+                uncle->set_color(RBNodePacked::EColor::Black);
                 node = grandparent;
             } else {
                 if (node == parent->get_left(memory))
@@ -367,115 +363,115 @@ Void RBTree::fix_insert(const RBNode* node)
                     parent = node->get_parent(memory);
                 }
                 rotate_left(grandparent);
-                const RBNode::EColor tempColor = parent->get_color();
+                const RBNodePacked::EColor tempColor = parent->get_color();
                 parent->set_color(grandparent->get_color());
                 grandparent->set_color(tempColor);
                 node = parent;
             }
         }
     }
-    root->set_color(RBNode::EColor::Black);
+    root->set_color(RBNodePacked::EColor::Black);
 }
 
-Void RBTree::fix_remove(RBNode* node)
+Void RBTree::fix_remove(RBNodePacked* node) noexcept
 {
     if (node == nullptr)
     {
         return;
     }
 
-    while (node != root && node->get_color() == RBNode::EColor::Black) 
+    while (node != root && node->get_color() == RBNodePacked::EColor::Black) 
     {
-        RBNode *parent = node->get_parent(memory);
+        RBNodePacked *parent = node->get_parent(memory);
         if (node == parent->get_left(memory))
         {
-            RBNode *sibling = parent->get_right(memory);
-            if (sibling->get_color() == RBNode::EColor::Red) 
+            RBNodePacked *sibling = parent->get_right(memory);
+            if (sibling->get_color() == RBNodePacked::EColor::Red) 
             {
-                sibling->set_color(RBNode::EColor::Black);
-                parent->set_color(RBNode::EColor::Red);
+                sibling->set_color(RBNodePacked::EColor::Black);
+                parent->set_color(RBNodePacked::EColor::Red);
                 rotate_left(parent);
                 sibling = parent->get_right(memory);
             }
 
             parent = node->get_parent(memory);
-            RBNode *left = sibling->get_left(memory);
-            RBNode *right = sibling->get_right(memory);
+            RBNodePacked *left = sibling->get_left(memory);
+            RBNodePacked *right = sibling->get_right(memory);
 
-            if ((!left || left->get_color() == RBNode::EColor::Black) && 
-                (!right || right->get_color() == RBNode::EColor::Black)) 
+            if ((!left || left->get_color() == RBNodePacked::EColor::Black) && 
+                (!right || right->get_color() == RBNodePacked::EColor::Black)) 
             {
-                sibling->set_color(RBNode::EColor::Red);
+                sibling->set_color(RBNodePacked::EColor::Red);
                 node = parent;
             } else {
-                if (!right || right->get_color() == RBNode::EColor::Black)
+                if (!right || right->get_color() == RBNodePacked::EColor::Black)
                 {
                     if (left)
                     {
-                        left->set_color(RBNode::EColor::Black);
+                        left->set_color(RBNodePacked::EColor::Black);
                     }
-                    sibling->set_color(RBNode::EColor::Red);
+                    sibling->set_color(RBNodePacked::EColor::Red);
                     rotate_right(sibling);
                     parent = node->get_parent(memory);
                     sibling = parent->get_right(memory);
                 }
                 sibling->set_color(parent->get_color());
-                parent->set_color(RBNode::EColor::Black);
+                parent->set_color(RBNodePacked::EColor::Black);
                 right = sibling->get_right(memory);
                 if (right)
                 {
-                    right->set_color(RBNode::EColor::Black);
+                    right->set_color(RBNodePacked::EColor::Black);
                 }
                 rotate_left(parent);
                 node = root;
             }
         } else {
-            RBNode *sibling = parent->get_left(memory);
-            if (sibling->get_color() == RBNode::EColor::Red) 
+            RBNodePacked *sibling = parent->get_left(memory);
+            if (sibling->get_color() == RBNodePacked::EColor::Red) 
             {
-                sibling->set_color(RBNode::EColor::Black);
-                parent->set_color(RBNode::EColor::Red);
+                sibling->set_color(RBNodePacked::EColor::Black);
+                parent->set_color(RBNodePacked::EColor::Red);
                 rotate_right(parent);
                 sibling = parent->get_left(memory);
             }
 
             parent = node->get_parent(memory);
-            RBNode *left = sibling->get_left(memory);
-            RBNode *right = sibling->get_right(memory);
+            RBNodePacked *left = sibling->get_left(memory);
+            RBNodePacked *right = sibling->get_right(memory);
 
-            if ((!left || left->get_color() == RBNode::EColor::Black) && 
-                (!right || right->get_color() == RBNode::EColor::Black)) 
+            if ((!left || left->get_color() == RBNodePacked::EColor::Black) && 
+                (!right || right->get_color() == RBNodePacked::EColor::Black)) 
             {
-                sibling->set_color(RBNode::EColor::Red);
+                sibling->set_color(RBNodePacked::EColor::Red);
                 node = parent;
             } else {
-                if (!left || left->get_color() == RBNode::EColor::Black)
+                if (!left || left->get_color() == RBNodePacked::EColor::Black)
                 {
                     if (right)
                     {
-                        right->set_color(RBNode::EColor::Black);
+                        right->set_color(RBNodePacked::EColor::Black);
                     }
-                    sibling->set_color(RBNode::EColor::Red);
+                    sibling->set_color(RBNodePacked::EColor::Red);
                     rotate_left(sibling);
                     parent = node->get_parent(memory);
                     sibling = parent->get_left(memory);
                 }
                 sibling->set_color(parent->get_color());
-                parent->set_color(RBNode::EColor::Black);
+                parent->set_color(RBNodePacked::EColor::Black);
                 left = sibling->get_left(memory);
                 if (left)
                 {
-                    left->set_color(RBNode::EColor::Black);
+                    left->set_color(RBNodePacked::EColor::Black);
                 }
                 rotate_right(parent);
                 node = root;
             }
         }
     }
-    node->set_color(RBNode::EColor::Black);
+    node->set_color(RBNodePacked::EColor::Black);
 }
 
-Void RBTree::print_helper(const RBNode* node, std::string indent, const Bool last)
+Void RBTree::print_helper(const RBNodePacked* node, std::string indent, const Bool last) noexcept
 {
     if (node)
     {

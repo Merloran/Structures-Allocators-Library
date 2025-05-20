@@ -3,6 +3,17 @@
 
 #include <codecvt>
 
+template <typename Type>
+concept Character =
+std::is_same_v<Type, Char  > || 
+std::is_same_v<Type, Char8 > || 
+std::is_same_v<Type, WChar > ||
+std::is_same_v<Type, Char16> ||
+std::is_same_v<Type, Char32>;
+
+//TODO: Implement commented methods
+//      Optimize replace and find
+
 enum class EStringFindStrategy
 {
     First,
@@ -21,28 +32,27 @@ enum class EStringTrimStrategy
 template <typename Type>
 class DynamicArray;
 
-template <typename CharacterType>
-requires (std::is_same_v<CharacterType, Char  > ||
-          std::is_same_v<CharacterType, Char8 > ||
-          std::is_same_v<CharacterType, WChar > ||
-          std::is_same_v<CharacterType, Char16> ||
-          std::is_same_v<CharacterType, Char32>)
+
+// Always initialize and finalize, do not make shallow copy by operator =,
+// if you want to make reserve or any other method that can change size of string,
+// do copy or move instead
+template <Character Type>
 class BasicString
 {
 private:
-    static constexpr UInt64 SSO_CAPACITY = 16 / sizeof(CharacterType) - 1;
-    static constexpr UInt64 SSO_FLAG = 1UI64 << 63; // Last bit of size contains this flag
+    static constexpr USize SSO_CAPACITY = 16 / sizeof(Type) - 1;
+    static constexpr USize SSO_FLAG = 1UI64 << 63; // Last bit of size contains this flag
     AllocatorInfo *allocatorInfo;
     union
     {
         struct
         {
-            CharacterType *elements;
-            UInt64 capacity;
+            Type *elements;
+            USize capacity;
         };
-        CharacterType smallText[SSO_CAPACITY + 1]; // Last character should be '\0'
+        Type smallText[SSO_CAPACITY + 1]; // Last character should be '\0'
     };
-    UInt64 size;
+    USize size;
 
 public:
     BasicString() noexcept
@@ -61,10 +71,10 @@ public:
             return;
         }
         size = SSO_FLAG;
-        smallText[0] = CharacterType();
+        smallText[0] = Type();
     }
 
-    Void initialize(const CharacterType* text,
+    Void initialize(const Type* text,
                     AllocatorInfo* allocator = AllocatorInfo::get_default_allocator()) noexcept
     {
         allocatorInfo = allocator;
@@ -77,7 +87,7 @@ public:
         if (!text)
         {
             size = SSO_FLAG;
-            smallText[0] = CharacterType();
+            smallText[0] = Type();
             return;
         }
 
@@ -85,19 +95,19 @@ public:
         Bool useSSO = size <= SSO_CAPACITY;
         if (useSSO)
         {
-            memcpy(smallText, text, (size + 1) * sizeof(CharacterType));
+            memcpy(smallText, text, (size + 1) * sizeof(Type));
             size |= SSO_FLAG;
             return;
         }
 
         capacity = size + 1;
-        elements = static_cast<CharacterType*>(allocatorInfo->allocate(allocator->allocator, 
-                                               capacity * sizeof(CharacterType)));
+        elements = static_cast<Type*>(allocatorInfo->allocate(allocator->allocator, 
+                                               capacity * sizeof(Type)));
 
-        memcpy(elements, text, capacity * sizeof(CharacterType));
+        memcpy(elements, text, capacity * sizeof(Type));
     }
 
-    Void reserve(UInt64 newCapacity) noexcept
+    Void reserve(USize newCapacity) noexcept
     {
         ++newCapacity;
         if (newCapacity <= SSO_CAPACITY || (!(size & SSO_FLAG) && newCapacity <= capacity))
@@ -105,14 +115,14 @@ public:
             return;
         }
 
-        CharacterType *newElements = static_cast<CharacterType *>(allocatorInfo->allocate(allocatorInfo->allocator, 
-                                                                                          newCapacity * sizeof(CharacterType)));
+        Type *newElements = static_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator, 
+                                                                                          newCapacity * sizeof(Type)));
 
         Bool isSSO = size & SSO_FLAG;
         if (isSSO)
         {
             size &= ~SSO_FLAG;
-            memcpy(newElements, smallText, (size + 1) * sizeof(CharacterType));
+            memcpy(newElements, smallText, (size + 1) * sizeof(Type));
             elements = newElements;
             capacity = newCapacity;
             return;
@@ -120,110 +130,110 @@ public:
 
         if (elements)
         {
-            memcpy(newElements, elements, (size + 1) * sizeof(CharacterType));
+            memcpy(newElements, elements, (size + 1) * sizeof(Type));
             allocatorInfo->deallocate(allocatorInfo->allocator, elements);
         }
         elements = newElements;
-        elements[size] = CharacterType();
+        elements[size] = Type();
         capacity = newCapacity;
     }
 
 
-    Bool check_prefix(const BasicString        &prefix) const noexcept
+    Bool check_prefix(const BasicString &prefix) const noexcept
     {
-        const UInt64 prefixSize = prefix.get_size();
+        const USize prefixSize = prefix.get_size();
         if (get_size() < prefixSize)
         {
             return false;
         }
 
-        return memcmp(begin(), prefix.begin(), prefixSize * sizeof(CharacterType)) == 0;
+        return memcmp(begin(), prefix.begin(), prefixSize * sizeof(Type)) == 0;
     }
 
-    Bool check_prefix(const CharacterType      *prefix) const noexcept
+    Bool check_prefix(const Type        *prefix) const noexcept
     {
         if (!prefix)
         {
             return false;
         }
 
-        const UInt64 prefixSize = BasicString::length(prefix);
+        const USize prefixSize = BasicString::length(prefix);
         if (get_size() < prefixSize)
         {
             return false;
         }
 
-        return std::memcmp(begin(), prefix, prefixSize * sizeof(CharacterType)) == 0;
+        return std::memcmp(begin(), prefix, prefixSize * sizeof(Type)) == 0;
     }
 
 
-    Bool check_suffix(const BasicString        &suffix) const noexcept
+    Bool check_suffix(const BasicString &suffix) const noexcept
     {
-        const UInt64 suffixSize = suffix.get_size();
+        const USize suffixSize = suffix.get_size();
         if (get_size() < suffixSize)
         {
             return false;
         }
 
-        return memcmp(end() - suffixSize, suffix.begin(), suffixSize * sizeof(CharacterType)) == 0;
+        return memcmp(end() - suffixSize, suffix.begin(), suffixSize * sizeof(Type)) == 0;
     }
 
-    Bool check_suffix(const CharacterType      *suffix) const noexcept
+    Bool check_suffix(const Type        *suffix) const noexcept
     {
         if (!suffix)
         {
             return false;
         }
 
-        const UInt64 suffixSize = BasicString::length(suffix);
+        const USize suffixSize = BasicString::length(suffix);
         if (get_size() < suffixSize)
         {
             return false;
         }
-        return memcmp(end() - suffixSize, suffix, suffixSize * sizeof(CharacterType)) == 0;
+        return memcmp(end() - suffixSize, suffix, suffixSize * sizeof(Type)) == 0;
     }
 
 
-    UInt64 find(const BasicString& substring,
+    USize find(const BasicString& substring,
                 const EStringFindStrategy strategy = EStringFindStrategy::First) const noexcept
     {
-        const UInt64 substringSize = substring.get_size();
-        const UInt64 selfSize = size & ~SSO_FLAG;
+        const USize substringSize = substring.get_size();
+        const USize selfSize = size & ~SSO_FLAG;
         switch (strategy)
         {
             case EStringFindStrategy::First:
             {
                 if (selfSize < substringSize)
                 {
-                    return ~UInt64(0);
+                    return ~USize(0);
                 }
-                const CharacterType *selfData = begin();
-                const CharacterType *substringData = substring.begin();
-                for (UInt64 i = 0; i < selfSize - substringSize; ++i, ++selfData)
+                const Type *selfData = begin();
+                const Type *substringData = substring.begin();
+                for (USize i = 0; i < selfSize - substringSize; ++i, ++selfData)
                 {
-                    if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
+                    if (memcmp(selfData, substringData, substringSize * sizeof(Type)) == 0)
                     {
                         return i;
                     }
                 }
-                return ~UInt64(0);
+                return ~USize(0);
             }
             case EStringFindStrategy::Last:
             {
                 if (selfSize < substringSize)
                 {
-                    return ~UInt64(0);
+                    return ~USize(0);
                 }
-                const CharacterType *selfData = end() - substringSize;
-                const CharacterType *substringData = substring.begin();
-                for (UInt64 i = selfSize - substringSize + 1; i > 0; --i, --selfData)
+                const Type *selfData = end() - substringSize;
+                const Type *substringData = substring.begin();
+                for (USize i = selfSize - substringSize + 1; i > 0; --i, --selfData)
                 {
-                    if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
+                    if (memcmp(selfData, substringData, substringSize * sizeof(Type)) == 0)
                     {
                         return i - 1;
                     }
                 }
-                return ~UInt64(0);
+                return ~USize(0);
             }
             case EStringFindStrategy::CountOverlapping:
             {
@@ -234,16 +244,16 @@ public:
 
                 if  (substringSize == 0)
                 {
-                    return ~UInt64(0);
+                    return ~USize(0);
                 }
 
-                UInt64 occurrencesCount = 0;
-                const CharacterType *substringData = substring.begin();
-                for (const CharacterType *selfData = begin(), *terminationElement = end() - substringSize;
+                USize occurrencesCount = 0;
+                const Type *substringData = substring.begin();
+                for (const Type *selfData = begin(), *terminationElement = end() - substringSize;
                      selfData <= terminationElement;
                      ++selfData)
                 {
-                    if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
+                    if (memcmp(selfData, substringData, substringSize * sizeof(Type)) == 0)
                     {
                         ++occurrencesCount;
                     }
@@ -259,16 +269,16 @@ public:
 
                 if  (substringSize == 0)
                 {
-                    return ~UInt64(0);
+                    return ~USize(0);
                 }
 
-                UInt64 occurrencesCount = 0;
-                const CharacterType *substringData = substring.begin();
-                for (const CharacterType *selfData = begin(), *terminationElement = end() - substringSize; 
+                USize occurrencesCount = 0;
+                const Type *substringData = substring.begin();
+                for (const Type *selfData = begin(), *terminationElement = end() - substringSize; 
                      selfData <= terminationElement;
                      ++selfData)
                 {
-                    if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
+                    if (memcmp(selfData, substringData, substringSize * sizeof(Type)) == 0)
                     {
                         ++occurrencesCount;
                         selfData += substringSize - 1;
@@ -277,54 +287,54 @@ public:
                 return occurrencesCount;
             }
         }
-        return ~UInt64(0); // Sanity check
+        return ~USize(0); // Sanity check
     }
 
-    UInt64 find(const CharacterType *substring,
+    USize find(const Type *substring,
                 const EStringFindStrategy strategy = EStringFindStrategy::First) const noexcept
     {
         if (!substring)
         {
-            return ~UInt64(0);
+            return ~USize(0);
         }
 
-        const UInt64 substringSize = BasicString::length(substring);
-        const UInt64 selfSize = size & ~SSO_FLAG;
+        const USize substringSize = BasicString::length(substring);
+        const USize selfSize = size & ~SSO_FLAG;
         switch (strategy)
         {
             case EStringFindStrategy::First:
             {
                 if (selfSize < substringSize)
                 {
-                    return ~UInt64(0);
+                    return ~USize(0);
                 }
-                const CharacterType *selfData = begin();
-                const CharacterType *substringData = substring;
-                for (UInt64 i = 0; i < selfSize - substringSize; ++i, ++selfData)
+                const Type *selfData = begin();
+                const Type *substringData = substring;
+                for (USize i = 0; i < selfSize - substringSize; ++i, ++selfData)
                 {
-                    if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
+                    if (memcmp(selfData, substringData, substringSize * sizeof(Type)) == 0)
                     {
                         return i;
                     }
                 }
-                return ~UInt64(0);
+                return ~USize(0);
             }
             case EStringFindStrategy::Last:
             {
                 if (selfSize < substringSize)
                 {
-                    return ~UInt64(0);
+                    return ~USize(0);
                 }
-                const CharacterType *selfData = end() - substringSize; //TODO: check it
-                const CharacterType *substringData = substring;
-                for (UInt64 i = selfSize - substringSize + 1; i > 0; --i, --selfData)
+                const Type *selfData = end() - substringSize; //TODO: check it
+                const Type *substringData = substring;
+                for (USize i = selfSize - substringSize + 1; i > 0; --i, --selfData)
                 {
-                    if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
+                    if (memcmp(selfData, substringData, substringSize * sizeof(Type)) == 0)
                     {
                         return i - 1;
                     }
                 }
-                return ~UInt64(0);
+                return ~USize(0);
             }
             case EStringFindStrategy::CountOverlapping:
             {
@@ -335,16 +345,16 @@ public:
 
                 if (substringSize == 0)
                 {
-                    return ~UInt64(0);
+                    return ~USize(0);
                 }
 
-                UInt64 occurrencesCount = 0;
-                const CharacterType *substringData = substring;
-                for (const CharacterType *selfData = begin(), *terminationElement = end() - substringSize;
+                USize occurrencesCount = 0;
+                const Type *substringData = substring;
+                for (const Type *selfData = begin(), *terminationElement = end() - substringSize;
                      selfData <= terminationElement;
                      ++selfData)
                 {
-                    if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
+                    if (memcmp(selfData, substringData, substringSize * sizeof(Type)) == 0)
                     {
                         ++occurrencesCount;
                     }
@@ -360,16 +370,16 @@ public:
 
                 if (substringSize == 0)
                 {
-                    return ~UInt64(0);
+                    return ~USize(0);
                 }
 
-                UInt64 occurrencesCount = 0;
-                const CharacterType *substringData = substring;
-                for (const CharacterType *selfData = begin(), *terminationElement = end() - substringSize;
+                USize occurrencesCount = 0;
+                const Type *substringData = substring;
+                for (const Type *selfData = begin(), *terminationElement = end() - substringSize;
                      selfData <= terminationElement;
                      ++selfData)
                 {
-                    if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
+                    if (memcmp(selfData, substringData, substringSize * sizeof(Type)) == 0)
                     {
                         ++occurrencesCount;
                         selfData += substringSize - 1;
@@ -378,23 +388,23 @@ public:
                 return occurrencesCount;
             }
         }
-        return ~UInt64(0); // Sanity check
+        return ~USize(0); // Sanity check
     }
 
 
-    Bool contains(const BasicString   &substring) const noexcept
+    Bool contains(const BasicString &substring) const noexcept
     {
-        const UInt64 selfSize = size & ~SSO_FLAG;
-        const UInt64 substringSize = substring.get_size();
+        const USize selfSize = size & ~SSO_FLAG;
+        const USize substringSize = substring.get_size();
         if (selfSize < substringSize)
         {
             return false;
         }
-        CharacterType *selfData = begin();
-        const CharacterType *substringData = substring.begin();
-        for (UInt64 i = 0; i < selfSize - substringSize; ++i, ++selfData)
+        Type *selfData = begin();
+        const Type *substringData = substring.begin();
+        for (USize i = 0; i < selfSize - substringSize; ++i, ++selfData)
         {
-            if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
+            if (memcmp(selfData, substringData, substringSize * sizeof(Type)) == 0)
             {
                 return true;
             }
@@ -402,25 +412,25 @@ public:
         return false;
     }
 
-    Bool contains(const CharacterType *substring) const noexcept
+    Bool contains(const Type        *substring) const noexcept
     {
         if (!substring)
         {
             return false;
         }
 
-        const UInt64 substringSize = BasicString::length(substring);
-        const UInt64 selfSize = size & ~SSO_FLAG;
+        const USize substringSize = BasicString::length(substring);
+        const USize selfSize = size & ~SSO_FLAG;
 
         if (selfSize < substringSize)
         {
             return false;
         }
-        CharacterType *selfData = begin();
-        const CharacterType *substringData = substring;
-        for (UInt64 i = 0; i < selfSize - substringSize; ++i, ++selfData)
+        Type *selfData = begin();
+        const Type *substringData = substring;
+        for (USize i = 0; i < selfSize - substringSize; ++i, ++selfData)
         {
-            if (memcmp(selfData, substringData, substringSize * sizeof(CharacterType)) == 0)
+            if (memcmp(selfData, substringData, substringSize * sizeof(Type)) == 0)
             {
                 return true;
             }
@@ -429,18 +439,18 @@ public:
     }
 
 
-    Int8 compare(const BasicString   &other) const noexcept
+    Int8 compare(const BasicString &other) const noexcept
     {
         return strcmp(begin(), other.begin());
     }
 
-    Int8 compare(const CharacterType *other) const noexcept
+    Int8 compare(const Type        *other) const noexcept
     {
         return strcmp(begin(), other);
     }
 
 
-    Bool equals(const BasicString   &other) const noexcept
+    Bool equals(const BasicString &other) const noexcept
     {
         if (get_size() != other.get_size())
         {
@@ -450,18 +460,18 @@ public:
         return strcmp(begin(), other.begin()) == 0;
     }
 
-    Bool equals(const CharacterType *other) const noexcept
+    Bool equals(const Type        *other) const noexcept
     {
         return strcmp(begin(), other) == 0;
     }
 
 
-    Void insert(const UInt64 position, const BasicString   &other) noexcept
+    Void insert(const USize position, const BasicString &other) noexcept
     {
-        const UInt64 selfSize = size & ~SSO_FLAG;
+        const USize selfSize = size & ~SSO_FLAG;
         assert(position <= selfSize);
 
-        const UInt64 otherSize = other.get_size();
+        const USize otherSize = other.get_size();
         if (otherSize == 0)
         {
             return;
@@ -469,26 +479,26 @@ public:
 
         reserve(selfSize + otherSize);
 
-        const UInt64 partSize = selfSize - position;
-        CharacterType *partOldBegin = begin() + position;
-        CharacterType *partNewBegin = partOldBegin + otherSize;
-        memmove(partNewBegin, partOldBegin, partSize * sizeof(CharacterType));
-        memcpy(partOldBegin, other.get_data(), otherSize * sizeof(CharacterType));
+        const USize partSize = selfSize - position;
+        Type *partOldBegin = begin() + position;
+        Type *partNewBegin = partOldBegin + otherSize;
+        memmove(partNewBegin, partOldBegin, partSize * sizeof(Type));
+        memcpy(partOldBegin, other.get_data(), otherSize * sizeof(Type));
         size += otherSize;
-        *end() = CharacterType();
+        *end() = Type();
     }
 
-    Void insert(const UInt64 position, const CharacterType *other) noexcept
+    Void insert(const USize position, const Type        *other) noexcept
     {
         if (!other)
         {
             return;
         }
 
-        const UInt64 selfSize = size & ~SSO_FLAG;
+        const USize selfSize = size & ~SSO_FLAG;
         assert(position <= selfSize);
 
-        const UInt64 otherSize = BasicString::length(other);
+        const USize otherSize = BasicString::length(other);
         if (otherSize == 0)
         {
             return;
@@ -496,58 +506,58 @@ public:
 
         reserve(selfSize + otherSize);
 
-        const UInt64 partSize = selfSize - position;
-        CharacterType *partOldBegin = begin() + position;
-        CharacterType *partNewBegin = partOldBegin + otherSize;
-        memmove(partNewBegin, partOldBegin, partSize * sizeof(CharacterType));
-        memcpy(partOldBegin, other, otherSize * sizeof(CharacterType));
+        const USize partSize = selfSize - position;
+        Type *partOldBegin = begin() + position;
+        Type *partNewBegin = partOldBegin + otherSize;
+        memmove(partNewBegin, partOldBegin, partSize * sizeof(Type));
+        memcpy(partOldBegin, other, otherSize * sizeof(Type));
         size += otherSize;
-        *end() = CharacterType();
+        *end() = Type();
     }
 
 
-    Void append(const BasicString   &other) noexcept
+    Void append(const BasicString &other) noexcept
     {
-        const UInt64 selfSize = get_size();
-        const UInt64 otherSize = other.get_size();
+        const USize selfSize = get_size();
+        const USize otherSize = other.get_size();
 
         reserve(selfSize + otherSize);
 
-        memcpy(end(), other.get_data(), otherSize * sizeof(CharacterType));
+        memcpy(end(), other.get_data(), otherSize * sizeof(Type));
         size += otherSize;
-        *end() = CharacterType();
+        *end() = Type();
     }
 
-    Void append(const CharacterType *other) noexcept
+    Void append(const Type        *other) noexcept
     {
         if (!other)
         {
             return;
         }
 
-        const UInt64 selfSize = get_size();
-        const UInt64 otherSize = BasicString::length(other);
+        const USize selfSize = get_size();
+        const USize otherSize = BasicString::length(other);
 
         reserve(selfSize + otherSize);
 
-        memcpy(end(), other, otherSize * sizeof(CharacterType));
+        memcpy(end(), other, otherSize * sizeof(Type));
         size += otherSize;
-        *end() = CharacterType();
+        *end() = Type();
     }
 
-    Void append(CharacterType        other) noexcept
+    Void append(const Type         other) noexcept
     {
         reserve(get_size() + 1);
 
         *end() = other;
         ++size;
-        *end() = CharacterType();
+        *end() = Type();
     }
 
 
-    Void replace(const BasicString   &newSubstring, const BasicString   &oldSubstring) noexcept
+    Void replace(const BasicString &newSubstring, const BasicString &oldSubstring) noexcept
     {
-        const UInt64 oldSubstringSize = oldSubstring.get_size();
+        const USize oldSubstringSize = oldSubstring.get_size();
 
         if (oldSubstringSize == 0)
         {
@@ -555,36 +565,36 @@ public:
             return;
         }
 
-        const UInt64 selfSize = get_size();
-        const UInt64 newSubstringSize = newSubstring.get_size();
+        const USize selfSize = get_size();
+        const USize newSubstringSize = newSubstring.get_size();
         const Int64 sizeDifference = newSubstringSize - oldSubstringSize;
         if (oldSubstringSize < newSubstringSize)
         {
-            const UInt64 occurrences = find(oldSubstring, EStringFindStrategy::CountNonOverlapping);
+            const USize occurrences = find(oldSubstring, EStringFindStrategy::CountNonOverlapping);
             reserve(selfSize + occurrences * sizeDifference);
             size += occurrences * sizeDifference;
         }
 
-        const CharacterType *oldSubstringData = oldSubstring.begin();
-        const CharacterType *newSubstringData = newSubstring.begin();
-        UInt64 currentOffset = 0;
-        for (CharacterType *selfData = begin(), *terminationElement = end() - oldSubstringSize;
+        const Type *oldSubstringData = oldSubstring.begin();
+        const Type *newSubstringData = newSubstring.begin();
+        USize currentOffset = 0;
+        for (Type *selfData = begin(), *terminationElement = end() - oldSubstringSize;
              selfData <= terminationElement;
              ++selfData, ++currentOffset)
         {
-            if (memcmp(selfData, oldSubstringData, oldSubstringSize * sizeof(CharacterType)) == 0)
+            if (memcmp(selfData, oldSubstringData, oldSubstringSize * sizeof(Type)) == 0)
             {
                 currentOffset += oldSubstringSize;
-                CharacterType *stringTail = selfData + oldSubstringSize;
-                memmove(stringTail + sizeDifference, stringTail, (selfSize - currentOffset) * sizeof(CharacterType));
-                memcpy(selfData, newSubstringData, newSubstringSize * sizeof(CharacterType));
+                Type *stringTail = selfData + oldSubstringSize;
+                memmove(stringTail + sizeDifference, stringTail, (selfSize - currentOffset) * sizeof(Type));
+                memcpy(selfData, newSubstringData, newSubstringSize * sizeof(Type));
                 currentOffset += sizeDifference - 1;
                 selfData += newSubstringSize - 1;
             }
         }
     }
     
-    Void replace(const CharacterType *newSubstring, const CharacterType *oldSubstring) noexcept
+    Void replace(const Type        *newSubstring, const Type        *oldSubstring) noexcept
     {
         if (!newSubstring || !oldSubstring)
         {
@@ -592,7 +602,7 @@ public:
             return;
         }
 
-        const UInt64 oldSubstringSize = BasicString::length(oldSubstring);
+        const USize oldSubstringSize = BasicString::length(oldSubstring);
 
         if (oldSubstringSize == 0)
         {
@@ -600,37 +610,37 @@ public:
             return;
         }
 
-        UInt64 selfSize = get_size();
-        const UInt64 newSubstringSize = BasicString::length(newSubstring);
+        USize selfSize = get_size();
+        const USize newSubstringSize = BasicString::length(newSubstring);
         const Int64 sizeDifference = newSubstringSize - oldSubstringSize;
         if (oldSubstringSize < newSubstringSize)
         {
-            const UInt64 occurrences = find(oldSubstring, EStringFindStrategy::CountNonOverlapping);
+            const USize occurrences = find(oldSubstring, EStringFindStrategy::CountNonOverlapping);
             reserve(selfSize + occurrences * sizeDifference);
             size += occurrences * sizeDifference;
             selfSize = get_size();
         }
 
-        const CharacterType *oldSubstringData = oldSubstring;
-        const CharacterType *newSubstringData = newSubstring;
-        UInt64 currentOffset = 0;
-        for (CharacterType *selfData = begin(), *terminationElement = end() - oldSubstringSize;
+        const Type *oldSubstringData = oldSubstring;
+        const Type *newSubstringData = newSubstring;
+        USize currentOffset = 0;
+        for (Type *selfData = begin(), *terminationElement = end() - oldSubstringSize;
              selfData <= terminationElement;
              ++selfData, ++currentOffset)
         {
-            if (memcmp(selfData, oldSubstringData, oldSubstringSize * sizeof(CharacterType)) == 0)
+            if (memcmp(selfData, oldSubstringData, oldSubstringSize * sizeof(Type)) == 0)
             {
                 currentOffset += oldSubstringSize;
-                CharacterType *stringTail = selfData + oldSubstringSize;
-                memmove(stringTail + sizeDifference, stringTail, (selfSize - currentOffset) * sizeof(CharacterType));
-                memcpy(selfData, newSubstringData, newSubstringSize * sizeof(CharacterType));
+                Type *stringTail = selfData + oldSubstringSize;
+                memmove(stringTail + sizeDifference, stringTail, (selfSize - currentOffset) * sizeof(Type));
+                memcpy(selfData, newSubstringData, newSubstringSize * sizeof(Type));
                 currentOffset += sizeDifference - 1;
                 selfData += newSubstringSize - 1;
             }
         }
     }
     
-    Void replace(const BasicString   &newSubstring, const CharacterType *oldSubstring) noexcept
+    Void replace(const BasicString &newSubstring, const Type        *oldSubstring) noexcept
     {
         if (!oldSubstring)
         {
@@ -638,7 +648,7 @@ public:
             return;
         }
 
-        const UInt64 oldSubstringSize = BasicString::length(oldSubstring);
+        const USize oldSubstringSize = BasicString::length(oldSubstring);
 
         if (oldSubstringSize == 0)
         {
@@ -646,36 +656,36 @@ public:
             return;
         }
 
-        const UInt64 selfSize = get_size();
-        const UInt64 newSubstringSize = newSubstring.get_size();
+        const USize selfSize = get_size();
+        const USize newSubstringSize = newSubstring.get_size();
         const Int64 sizeDifference = newSubstringSize - oldSubstringSize;
         if (oldSubstringSize < newSubstringSize)
         {
-            const UInt64 occurrences = find(oldSubstring, EStringFindStrategy::CountNonOverlapping);
+            const USize occurrences = find(oldSubstring, EStringFindStrategy::CountNonOverlapping);
             reserve(selfSize + occurrences * sizeDifference);
             size += occurrences * sizeDifference;
         }
 
-        const CharacterType *oldSubstringData = oldSubstring;
-        const CharacterType *newSubstringData = newSubstring.begin();
-        UInt64 currentOffset = 0;
-        for (CharacterType *selfData = begin(), *terminationElement = end() - oldSubstringSize;
+        const Type *oldSubstringData = oldSubstring;
+        const Type *newSubstringData = newSubstring.begin();
+        USize currentOffset = 0;
+        for (Type *selfData = begin(), *terminationElement = end() - oldSubstringSize;
              selfData <= terminationElement;
              ++selfData, ++currentOffset)
         {
-            if (memcmp(selfData, oldSubstringData, oldSubstringSize * sizeof(CharacterType)) == 0)
+            if (memcmp(selfData, oldSubstringData, oldSubstringSize * sizeof(Type)) == 0)
             {
                 currentOffset += oldSubstringSize;
-                CharacterType *stringTail = selfData + oldSubstringSize;
-                memmove(stringTail + sizeDifference, stringTail, (selfSize - currentOffset) * sizeof(CharacterType));
-                memcpy(selfData, newSubstringData, newSubstringSize * sizeof(CharacterType));
+                Type *stringTail = selfData + oldSubstringSize;
+                memmove(stringTail + sizeDifference, stringTail, (selfSize - currentOffset) * sizeof(Type));
+                memcpy(selfData, newSubstringData, newSubstringSize * sizeof(Type));
                 currentOffset += sizeDifference - 1;
                 selfData += newSubstringSize - 1;
             }
         }
     }
     
-    Void replace(const CharacterType *newSubstring, const BasicString   &oldSubstring) noexcept
+    Void replace(const Type        *newSubstring, const BasicString &oldSubstring) noexcept
     {
         if (!newSubstring)
         {
@@ -683,7 +693,7 @@ public:
             return;
         }
 
-        const UInt64 oldSubstringSize = oldSubstring.get_size();
+        const USize oldSubstringSize = oldSubstring.get_size();
 
         if (oldSubstringSize == 0)
         {
@@ -691,29 +701,29 @@ public:
             return;
         }
 
-        const UInt64 selfSize = get_size();
-        const UInt64 newSubstringSize = BasicString::length(newSubstring);
+        const USize selfSize = get_size();
+        const USize newSubstringSize = BasicString::length(newSubstring);
         const Int64 sizeDifference = newSubstringSize - oldSubstringSize;
         if (oldSubstringSize < newSubstringSize)
         {
-            const UInt64 occurrences = find(oldSubstring, EStringFindStrategy::CountNonOverlapping);
+            const USize occurrences = find(oldSubstring, EStringFindStrategy::CountNonOverlapping);
             reserve(selfSize + occurrences * sizeDifference);
             size += occurrences * sizeDifference;
         }
 
-        const CharacterType *oldSubstringData = oldSubstring.begin();
-        const CharacterType *newSubstringData = newSubstring;
-        UInt64 currentOffset = 0;
-        for (CharacterType *selfData = begin(), *terminationElement = end() - oldSubstringSize;
+        const Type *oldSubstringData = oldSubstring.begin();
+        const Type *newSubstringData = newSubstring;
+        USize currentOffset = 0;
+        for (Type *selfData = begin(), *terminationElement = end() - oldSubstringSize;
              selfData <= terminationElement;
              ++selfData, ++currentOffset)
         {
-            if (memcmp(selfData, oldSubstringData, oldSubstringSize * sizeof(CharacterType)) == 0)
+            if (memcmp(selfData, oldSubstringData, oldSubstringSize * sizeof(Type)) == 0)
             {
                 currentOffset += oldSubstringSize;
-                CharacterType *stringTail = selfData + oldSubstringSize;
-                memmove(stringTail + sizeDifference, stringTail, (selfSize - currentOffset) * sizeof(CharacterType));
-                memcpy(selfData, newSubstringData, newSubstringSize * sizeof(CharacterType));
+                Type *stringTail = selfData + oldSubstringSize;
+                memmove(stringTail + sizeDifference, stringTail, (selfSize - currentOffset) * sizeof(Type));
+                memcpy(selfData, newSubstringData, newSubstringSize * sizeof(Type));
                 currentOffset += sizeDifference - 1;
                 selfData += newSubstringSize - 1;
             }
@@ -722,10 +732,10 @@ public:
 
 
     template<typename = Void>
-    requires (std::is_same_v<CharacterType, Char8> || std::is_same_v<CharacterType, Char>)
+    requires (std::is_same_v<Type, Char8> || std::is_same_v<Type, Char>)
     Void to_upper() noexcept
     {
-        for (CharacterType *element = begin(); *element != Char8(); ++element)
+        for (Type *element = begin(); *element != Char8(); ++element)
         {
             if (*element >= Char8('a') && *element <= Char8('z'))
             {
@@ -735,10 +745,10 @@ public:
     }
 
     template<typename = Void>
-    requires (std::is_same_v<CharacterType, Char8> || std::is_same_v<CharacterType, Char>)
+    requires (std::is_same_v<Type, Char8> || std::is_same_v<Type, Char>)
     Void to_lower() noexcept
     {
-        for (CharacterType *element = begin(); *element != Char8(); ++element)
+        for (Type *element = begin(); *element != Char8(); ++element)
         {
             if (*element >= Char8('A') && *element <= Char8('Z'))
             {
@@ -753,30 +763,30 @@ public:
         {
             case EStringTrimStrategy::Begin:
             {
-                UInt64 offset = 0;
-                CharacterType *selfBegin = begin();
-                for (CharacterType *element = selfBegin; BasicString::is_white_space(*element); ++element)
+                USize offset = 0;
+                Type *selfBegin = begin();
+                for (Type *element = selfBegin; BasicString::is_white_space(*element); ++element)
                 {
                     ++offset;
                 }
                 size -= offset;
                 memcpy(selfBegin, selfBegin + offset, size & ~SSO_FLAG);
-                *end() = CharacterType();
+                *end() = Type();
                 break;
             }
             case EStringTrimStrategy::End:
             {
-                for (CharacterType *element = end() - 1; BasicString::is_white_space(*element); --element)
+                for (Type *element = end() - 1; BasicString::is_white_space(*element); --element)
                 {
                     --size;
                 }
-                *end() = CharacterType();
+                *end() = Type();
                 break;
             }
             case EStringTrimStrategy::All:
             {
-                UInt64 offset = 0;
-                for (CharacterType *element = begin(); *element != CharacterType(); ++element)
+                USize offset = 0;
+                for (Type *element = begin(); *element != Type(); ++element)
                 {
                     if (BasicString::is_white_space(*element))
                     {
@@ -786,7 +796,7 @@ public:
                     }
                 }
                 size -= offset;
-                *end() = CharacterType();
+                *end() = Type();
                 break;
             }
         }
@@ -794,9 +804,9 @@ public:
 
     Void reverse() noexcept
     {
-        CharacterType holder;
-        CharacterType *beginElement = begin();
-        CharacterType *endElement   = end() - 1;
+        Type holder;
+        Type *beginElement = begin();
+        Type *endElement   = end() - 1;
 
         for (; beginElement < endElement; ++beginElement, --endElement)
         {
@@ -804,24 +814,24 @@ public:
         }
     }
 
-    Void remove(const UInt64 position, const UInt64 length) noexcept
+    Void remove(const USize position, const USize length) noexcept
     {
-        const UInt64 selfSize = size & ~SSO_FLAG;
+        const USize selfSize = size & ~SSO_FLAG;
         assert(position + length <= selfSize);
 
-        CharacterType *elementsDestination = begin() + position;
-        CharacterType *elementsToMove      = elementsDestination + length;
-        const UInt64   elementsSize        = selfSize - (position + length);
+        Type *elementsDestination = begin() + position;
+        Type *elementsToMove      = elementsDestination + length;
+        const USize   elementsSize        = selfSize - (position + length);
 
         memcpy(elementsDestination, elementsToMove, elementsSize);
         size -= length;
-        *end() = CharacterType();
+        *end() = Type();
     }
 
-    Void remove(CharacterType character) noexcept
+    Void remove(Type character) noexcept
     {
-        UInt64 offset = 0;
-        for (CharacterType *element = begin(); *element != CharacterType(); ++element)
+        USize offset = 0;
+        for (Type *element = begin(); *element != Type(); ++element)
         {
             if (*element == character)
             {
@@ -831,7 +841,7 @@ public:
             }
         }
         size -= offset;
-        *end() = CharacterType();
+        *end() = Type();
     }
 
     Void move(BasicString &source) noexcept
@@ -863,9 +873,9 @@ public:
         {
             elements = source.elements;
         } else {
-            elements = reinterpret_cast<CharacterType*>(allocatorInfo->allocate(allocatorInfo->allocator, 
-                                                        capacity * sizeof(CharacterType)));
-            memcpy(elements, source.elements, size * sizeof(CharacterType));
+            elements = reinterpret_cast<Type*>(allocatorInfo->allocate(allocatorInfo->allocator, 
+                                                        capacity * sizeof(Type)));
+            memcpy(elements, source.elements, size * sizeof(Type));
         }
     }
 
@@ -881,62 +891,62 @@ public:
     }
 
     [[nodiscard]]
-    UInt64 get_size() const noexcept
+    USize get_size() const noexcept
     {
         return size & ~SSO_FLAG;
     }
 
     [[nodiscard]]
-    UInt64 get_capacity() const noexcept
+    USize get_capacity() const noexcept
     {
         return size & SSO_FLAG ? SSO_CAPACITY : capacity;
     }
 
     // UInt64 hash() const;
 
-    CharacterType *get_data() noexcept
+    Type *get_data() noexcept
     {
         return size & SSO_FLAG ? smallText : elements;
     }
 
-    const CharacterType *get_data() const noexcept
+    const Type *get_data() const noexcept
     {
         return size & SSO_FLAG ? smallText : elements;
     }
 
 
-    CharacterType *begin() noexcept
+    Type *begin() noexcept
     {
         return size & SSO_FLAG ? smallText : elements;
     }
 
     [[nodiscard]]
-    const CharacterType *begin() const noexcept
+    const Type *begin() const noexcept
     {
         return size & SSO_FLAG ? smallText : elements;
     }
 
 
-    CharacterType *end() noexcept
+    Type *end() noexcept
     {
         return (size & SSO_FLAG) ? smallText + (size & ~SSO_FLAG) : elements + (size & ~SSO_FLAG);
     }
 
     [[nodiscard]]
-    const CharacterType *end() const noexcept
+    const Type *end() const noexcept
     {
         return (size & SSO_FLAG) ? smallText + (size & ~SSO_FLAG) : elements + (size & ~SSO_FLAG);
     }
 
 #pragma region OPERATORS
 
-    inline CharacterType &operator[](UInt64 index) noexcept
+    inline Type &operator[](USize index) noexcept
     {
         assert(index < size & ~SSO_FLAG);
         return size & SSO_FLAG ? smallText[index] : elements[index];
     }
 
-    inline CharacterType  operator[](UInt64 index) const noexcept
+    inline Type  operator[](USize index) const noexcept
     {
         assert(index < size & ~SSO_FLAG);
         return size & SSO_FLAG ? smallText[index] : elements[index];
@@ -951,7 +961,7 @@ public:
         return copy;
     }
 
-    BasicString operator+(const CharacterType *other) const noexcept
+    BasicString operator+(const Type *other) const noexcept
     {
         BasicString copy;
         copy.copy(*this);
@@ -959,7 +969,7 @@ public:
         return copy;
     }
 
-    BasicString operator+(      CharacterType  other) const noexcept
+    BasicString operator+(      Type  other) const noexcept
     {
         BasicString copy;
         copy.copy(*this);
@@ -973,12 +983,12 @@ public:
         append(other);
     }
 
-    inline Void operator+=(const CharacterType *other) noexcept
+    inline Void operator+=(const Type *other) noexcept
     {
         append(other);
     }
 
-    inline Void operator+=(      CharacterType  other) noexcept
+    inline Void operator+=(      Type  other) noexcept
     {
         append(other);
     }
@@ -1015,32 +1025,32 @@ public:
     }
 
 
-    inline Bool operator!=(const CharacterType *other) const noexcept
+    inline Bool operator!=(const Type *other) const noexcept
     {
         return equals(other);
     }
 
-    inline Bool operator==(const CharacterType *other) const noexcept
+    inline Bool operator==(const Type *other) const noexcept
     {
         return equals(other);
     }
 
-    inline Bool operator< (const CharacterType *other) const noexcept
+    inline Bool operator< (const Type *other) const noexcept
     {
         return compare(other) == -1I8;
     }
 
-    inline Bool operator<=(const CharacterType *other) const noexcept
+    inline Bool operator<=(const Type *other) const noexcept
     {
         return compare(other) != 1I8;
     }
 
-    inline Bool operator> (const CharacterType *other) const noexcept
+    inline Bool operator> (const Type *other) const noexcept
     {
         return compare(other) == 1I8;
     }
 
-    inline Bool operator>=(const CharacterType *other) const noexcept
+    inline Bool operator>=(const Type *other) const noexcept
     {
         return compare(other) != -1I8;
     }
@@ -1049,7 +1059,7 @@ public:
 
     Void clear() noexcept
     {
-        *begin() = CharacterType();
+        *begin() = Type();
         size &= SSO_FLAG;
     }
 
@@ -1074,27 +1084,27 @@ public:
 
     // static String format(const CharacterType *fmt, ...);
 
-    template <typename = std::enable_if_t<!std::is_same_v<std::nullptr_t, CharacterType>>>
-    static constexpr UInt64 length(const CharacterType *text) noexcept
+    template <typename = std::enable_if_t<!std::is_same_v<std::nullptr_t, Type>>>
+    static constexpr USize length(const Type *text) noexcept
     {
-        if constexpr (std::is_same_v<CharacterType, Char> || std::is_same_v<CharacterType, Char8>)
+        if constexpr (std::is_same_v<Type, Char> || std::is_same_v<Type, Char8>)
         {
             return __builtin_strlen(reinterpret_cast<const Char *>(text));
         }
-        else if constexpr (std::is_same_v<CharacterType, WChar>)
+        else if constexpr (std::is_same_v<Type, WChar>)
         {
             return __builtin_wcslen(text);
         }
-        else if constexpr (std::is_same_v<CharacterType, Char16> && sizeof(WChar) == 2)
+        else if constexpr (std::is_same_v<Type, Char16> && sizeof(WChar) == 2)
         {
             return __builtin_wcslen(reinterpret_cast<const WChar *>(text));
         }
-        else if constexpr (std::is_same_v<CharacterType, Char32> && sizeof(WChar) == 4)
+        else if constexpr (std::is_same_v<Type, Char32> && sizeof(WChar) == 4)
         {
             return __builtin_wcslen(reinterpret_cast<const WChar *>(text));
         } else {
-            UInt64 length = 0;
-            while (*text != CharacterType())
+            USize length = 0;
+            while (*text != Type())
             {
                 ++length;
                 ++text;
@@ -1104,25 +1114,25 @@ public:
         }
     }
 
-    static constexpr Bool is_white_space(CharacterType character)
+    static constexpr Bool is_white_space(Type character)
     {
-        if (character == CharacterType(0x20) || (character >= CharacterType(0x09) && character <= CharacterType(0x0D)))
+        if (character == Type(0x20) || (character >= Type(0x09) && character <= Type(0x0D)))
         {
             return true;
         }
 
-        if constexpr (!std::is_same_v<CharacterType, Char8> && !std::is_same_v<CharacterType, Char>)
+        if constexpr (!std::is_same_v<Type, Char8> && !std::is_same_v<Type, Char>)
         {
-            return character >= CharacterType(0x00A0) && character <= CharacterType(0x3000) &&
+            return character >= Type(0x00A0) && character <= Type(0x3000) &&
                    (
-                       character == CharacterType(0x00A0)                                         ||
-                       character == CharacterType(0x1680)                                         ||
-                       (character >= CharacterType(0x2000) && character <= CharacterType(0x200A)) ||
-                       character == CharacterType(0x2028)                                         ||
-                       character == CharacterType(0x2029)                                         ||
-                       character == CharacterType(0x202F)                                         ||
-                       character == CharacterType(0x205F)                                         ||
-                       character == CharacterType(0x3000)
+                       character == Type(0x00A0)                                         ||
+                       character == Type(0x1680)                                         ||
+                       (character >= Type(0x2000) && character <= Type(0x200A))          ||
+                       character == Type(0x2028)                                         ||
+                       character == Type(0x2029)                                         ||
+                       character == Type(0x202F)                                         ||
+                       character == Type(0x205F)                                         ||
+                       character == Type(0x3000)
                    );
         }
 

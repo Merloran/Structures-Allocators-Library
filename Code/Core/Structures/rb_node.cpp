@@ -1,200 +1,104 @@
 #include "rb_node.hpp"
 
-#include "Memory/memory_utils.hpp"
-
-RBNode *RBNode::get_parent(Void *memory) const
+RBNode* RBNode::get_parent() const noexcept
 {
-    constexpr UInt64 DATA_OFFSET = 0_B;
-    UInt64 result = 0;
-    memcpy(&result, data + DATA_OFFSET, 5);
-    RBNode *address = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(memory) + (result & 0xfffffffff));
-    return address == memory ? nullptr : address;
+    return parent;
 }
 
-RBNode *RBNode::get_left(Void *memory) const
+RBNode* RBNode::get_left() const noexcept
 {
-    constexpr UInt64 DATA_OFFSET = 4_B;
-    UInt64 result = 0;
-    memcpy(&result, data + DATA_OFFSET, 5);
-    RBNode *address = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8*>(memory) + ((result & 0xffffffffff) >> 4));
-    return address == memory ? nullptr : address;
+    return left;
 }
 
-RBNode *RBNode::get_right(Void *memory) const
+RBNode* RBNode::get_right() const noexcept
 {
-    constexpr UInt64 DATA_OFFSET = 9_B;
-    UInt64 result = 0;
-    memcpy(&result, data + DATA_OFFSET, 5);
-    RBNode *address = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(memory) + (result & 0xfffffffff));
-    return address == memory ? nullptr : address;
+    return right;
 }
 
-RBNode *RBNode::get_next()
+RBNode* RBNode::get_next() const noexcept
 {
-    const Bool isNextSet = data[22] & 0x20;
     if (isNextSet)
     {
-        UInt64 exactNodeSize = sizeof(RBNode) + get_size();
-        return reinterpret_cast<RBNode*>(reinterpret_cast<UInt8 *>(this) + exactNodeSize);
+        const USize exactNodeSize = sizeof(RBNode) + size;
+        return reinterpret_cast<RBNode *>(byte_cast(const_cast<RBNode *>(this) + exactNodeSize));
     }
     return nullptr;
 }
 
-RBNode *RBNode::get_previous(Void *memory) const
+RBNode* RBNode::get_previous() const noexcept
 {
-    constexpr UInt64 DATA_OFFSET = 13_B;
-    UInt64 result = 0;
-    memcpy(&result, data + DATA_OFFSET, 5);
-    RBNode *address = reinterpret_cast<RBNode *>(reinterpret_cast<UInt8 *>(memory) + ((result & 0xffffffffff) >> 4));
-    return address == memory ? nullptr : address;
+    return previous;
 }
 
-UInt64 RBNode::get_size() const
+USize RBNode::get_size() const noexcept
 {
-    constexpr UInt64 DATA_OFFSET = 18_B;
-    UInt64 result = 0;
-    memcpy(&result, data + DATA_OFFSET, 5);
-    return result & 0xfffffffff;
+    return size;
 }
 
-RBNode::EColor RBNode::get_color() const
+RBNode::EColor RBNode::get_color() const noexcept
 {
-    constexpr UInt64 DATA_OFFSET = 22_B;
-    const Bool result = data[DATA_OFFSET] & 0x80;
-    return result ? EColor::Red : EColor::Black;
+    return color;
 }
 
-Bool RBNode::is_free() const
+Bool RBNode::is_free() const noexcept
 {
-    constexpr UInt64 DATA_OFFSET = 22_B;
-    const Bool result = data[DATA_OFFSET] & 0x40;
-    return !result;
+    return isFree;
 }
 
-Void* RBNode::get_memory()
+Byte* RBNode::get_memory() const noexcept
 {
-    return reinterpret_cast<UInt8*>(this) + sizeof(RBNode);
+    return byte_cast(const_cast<RBNode *>(this)) + sizeof(RBNode);
 }
 
-Void RBNode::set_parent(RBNode* parent, Void* memory)
+Void RBNode::set_parent(RBNode* nodeParent) noexcept
 {
-    constexpr UInt64 DATA_OFFSET = 0_B;
-    UInt64 offset = 0;
-    if (parent)
+    parent = nodeParent;
+}
+
+Void RBNode::set_left(RBNode* leftChild) noexcept
+{
+    left = leftChild;
+}
+
+Void RBNode::set_right(RBNode* rightChild) noexcept
+{
+    right = rightChild;
+}
+
+Void RBNode::set_next(const RBNode* nextNode) noexcept
+{
+    if (nextNode != nullptr)
     {
-        offset = reinterpret_cast<UInt8 *>(parent) - reinterpret_cast<UInt8 *>(memory);
-    }
-    // Set first 4 bytes to data
-    memcpy(data + DATA_OFFSET, &offset, 4);
-    // Set first half of last shared byte
-    data[DATA_OFFSET + 4] &= 0xf0;
-    data[DATA_OFFSET + 4] |= offset >> 32 & 0x0f;
-}
-
-Void RBNode::set_left(RBNode* left, Void* memory)
-{
-    constexpr UInt64 DATA_OFFSET = 4_B;
-
-    UInt64 offset = 0;
-    if (left)
-    {
-        offset = reinterpret_cast<UInt8 *>(left) - reinterpret_cast<UInt8 *>(memory);
-        offset <<= 4;
-    }
-    // Set last 4 bytes to data
-    memcpy(data + DATA_OFFSET + 1, reinterpret_cast<UInt8 *>(&offset) + 1, 4);
-    // Set second half of first shared byte
-    data[DATA_OFFSET] &= 0x0f;
-    data[DATA_OFFSET] |= offset & 0xf0;
-}
-
-Void RBNode::set_right(RBNode* right, Void* memory)
-{
-    constexpr UInt64 DATA_OFFSET = 9_B;
-    UInt64 offset = 0;
-    if (right)
-    {
-        offset = reinterpret_cast<UInt8 *>(right) - reinterpret_cast<UInt8 *>(memory);
-    }
-    // Set first 4 bytes to data
-    memcpy(data + DATA_OFFSET, &offset, 4);
-    // Set first half of last shared byte
-    data[DATA_OFFSET + 4] &= 0xf0;
-    data[DATA_OFFSET + 4] |= offset >> 32 & 0x0f;
-}
-
-Void RBNode::set_next(RBNode* next)
-{
-    constexpr UInt64 DATA_OFFSET = 22_B;
-    if (next)
-    {
-        data[DATA_OFFSET] |= 0x20;
+        isNextSet = true;
     } else {
-        data[DATA_OFFSET] &= ~0x20;
+        isNextSet = false;
     }
 }
 
-Void RBNode::set_previous(RBNode* previous, Void* memory)
+Void RBNode::set_previous(RBNode* previousNode) noexcept
 {
-    constexpr UInt64 DATA_OFFSET = 13_B;
-
-    UInt64 offset = 0;
-    if (previous)
-    {
-        offset = reinterpret_cast<UInt8 *>(previous) - reinterpret_cast<UInt8 *>(memory);
-        offset <<= 4;
-    }
-    // Set last 4 bytes to data
-    memcpy(data + DATA_OFFSET + 1, reinterpret_cast<UInt8 *>(&offset) + 1, 4);
-    // Set second half of first shared byte
-    data[DATA_OFFSET] &= 0x0f;
-    data[DATA_OFFSET] |= offset & 0xf0;
+    previous = previousNode;
 }
 
-Void RBNode::set_size(UInt64 size)
+Void RBNode::set_size(USize nodeSize) noexcept
 {
-    if (size > MAX_NODE_SIZE)
-    {
-        SPDLOG_CRITICAL("Node size is too large: {}!!!", size);
-        assert(false);
-        return;
-    }
-    constexpr UInt64 DATA_OFFSET = 18_B;
-    // Set first 4 bytes to data
-    memcpy(data + DATA_OFFSET, &size, 4);
-    // Set first half of last shared byte
-    data[DATA_OFFSET + 4] &= 0xf0;
-    data[DATA_OFFSET + 4] |= size >> 32 & 0x0f;
+    size = nodeSize;
 }
 
-Void RBNode::set_color(const EColor color)
+Void RBNode::set_color(EColor nodeColor) noexcept
 {
-    constexpr UInt64 DATA_OFFSET = 22_B;
-    if (color == EColor::Red)
-    {
-        data[DATA_OFFSET] |= 0x80;
-    } else {
-        data[DATA_OFFSET] &= ~0x80;
-    }
+    color = nodeColor;
 }
 
-Void RBNode::set_free(const Bool isFree)
+Void RBNode::set_free(Bool isNodeFree) noexcept
 {
-    constexpr UInt64 DATA_OFFSET = 22_B;
-    if (!isFree)
-    {
-        data[DATA_OFFSET] |= 0x40;
-    } else {
-        data[DATA_OFFSET] &= ~0x40;
-    }
+    isFree = isNodeFree;
 }
 
 Void RBNode::reset()
 {
-    //Set parent, left and right to nullptr
-    memset(data, 0, 13);
-    data[13] &= 0xf0;
-
-    set_color(EColor::Red);
-    set_free(true);
+    parent = left = right = nullptr;
+    color = EColor::Red;
+    isFree = true;
+    isNextSet = false;
 }
