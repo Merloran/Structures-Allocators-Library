@@ -1,10 +1,10 @@
 #pragma once
 
-template <typename Type, USize size>
+template <Manual Type, USize Size>
 class Array
 {
 private:
-    Type elements[size];
+    Type elements[Size];
 
 public:
     constexpr Array() noexcept
@@ -17,20 +17,20 @@ public:
     }
     
     template <typename... Args>
-    requires (sizeof...(Args) == size) && (std::same_as<std::decay_t<Args>, Type> && ...)
+    requires (sizeof...(Args) == Size) && (std::same_as<std::decay_t<Args>, Type> && ...)
     constexpr Array(const Args&... values) noexcept
     : elements{ static_cast<Type>(values)... }
     {}
 
     [[nodiscard]]
-    consteval USize get_size() const noexcept
+    static consteval USize get_size() noexcept
     {
-        return size;
+        return Size;
     }
 
     Type &operator[](USize index) noexcept
     {
-        assert(index < size);
+        assert(index < Size);
         return elements[index];
     }
 
@@ -41,7 +41,7 @@ public:
 
     Type &get_last() noexcept
     {
-        return elements[size - 1];
+        return elements[Size - 1];
     }
 
     Type *get_data() noexcept
@@ -56,26 +56,37 @@ public:
 
     Type *end() noexcept
     {
-        return elements + size;
+        return elements + Size;
     }
 
     constexpr Void copy(const Array &source) noexcept
     {
-        memcpy(elements, source.elements, size * sizeof(Type));
+        memcpy(elements, source.elements, Size * sizeof(Type));
     }
 
     constexpr Void fill(const Type &value) noexcept
     {
-        Type *data = elements;
-        for (USize i = size; i > 0; --i, ++data)
+        if constexpr (Copyable<Type>)
         {
-            *data = value;
+            Type *data = elements;
+            const Type *dataEnd = elements + Size;
+            for (; data < dataEnd; ++data)
+            {
+                data->copy(value);
+            }
+        } else {
+            Type *data = elements;
+            const Type *dataEnd = elements + Size;
+            for (; data < dataEnd; ++data)
+            {
+                *data = value;
+            }
         }
     }
 
     Void swap(USize left, USize right) noexcept
     {
-        assert(left < size && right < size);
+        assert(left < Size && right < Size);
         const Type &temporary = elements[left];
         elements[left] = elements[right];
         elements[right] = temporary;
@@ -84,7 +95,7 @@ public:
     [[nodiscard]]
     constexpr Bool contains(const Type &value) const noexcept
     {
-        for (USize i = 0; i < size; ++i)
+        for (USize i = 0; i < Size; ++i)
         {
             if (elements[i] == value)
             {
@@ -97,7 +108,7 @@ public:
     [[nodiscard]]
     constexpr Type &operator[](USize index) const noexcept
     {
-        assert(index < size);
+        assert(index < Size);
         return elements[index];
     }
 
@@ -110,7 +121,7 @@ public:
     [[nodiscard]]
     constexpr Type &get_last() const noexcept
     {
-        return elements[size - 1];
+        return elements[Size - 1];
     }
 
     [[nodiscard]]
@@ -128,6 +139,6 @@ public:
     [[nodiscard]]
     constexpr Type *end() const noexcept
     {
-        return elements + size;
+        return elements + Size;
     }
 };

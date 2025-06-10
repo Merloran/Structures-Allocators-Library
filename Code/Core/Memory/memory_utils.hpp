@@ -21,3 +21,60 @@ struct AllocatorInfo
         return &defaultAllocator;
     }
 };
+
+namespace Memory
+{
+    template<Manual Type, Bool CallConstructor = true>
+    Type *start_object(Byte *memory) noexcept
+    {
+        assert(memory && "Invalid pointer!");
+
+        if constexpr (CallConstructor)
+        {
+            return std::launder(new (memory) Type{});
+        } else {
+            return std::launder(static_cast<Type *>(std::memmove(memory, memory, sizeof(Type))));
+        }
+
+    }
+
+    template<Manual Type, Bool CallConstructors = true>
+    Type *start_object(Byte *memory, const USize count) noexcept
+    {
+        assert(memory && "Invalid pointer!");
+        assert(count > 1 && "Count should be bigger than 1 or not be passed as parameter!");
+
+        if constexpr (CallConstructors)
+        {
+            Type *startedArray = reinterpret_cast<Type *>(memory);
+            for (USize i = 0; i < count; ++i)
+            {
+                new (startedArray + i) Type{};
+            }
+            return std::launder(startedArray);
+        } else {
+            return std::launder(static_cast<Type *>(std::memmove(memory, memory, sizeof(Type) * count)));
+        }
+    }
+
+    template <Manual Type, Bool CallConstructor = true>
+    Type *allocate(AllocatorInfo *allocatorInfo) noexcept
+    {
+        assert(allocatorInfo && "Invalid pointer!");
+        return start_object<Type, CallConstructor>(allocatorInfo->allocate(allocatorInfo->allocator, 
+                                                                                 sizeof(Type), 
+                                                                                 alignof(Type)));
+    }
+
+    template <Manual Type, Bool CallConstructor = true>
+    Type *allocate(AllocatorInfo *allocatorInfo, const USize count) noexcept
+    {
+        assert(allocatorInfo && "Invalid pointer!");
+        assert(count > 1 && "Count should be bigger than 1 or not be passed as parameter!");
+        return start_object<Type, CallConstructor>(allocatorInfo->allocate(allocatorInfo->allocator, 
+                                                                                 count * sizeof(Type), 
+                                                                                 alignof(Type)),
+                                                   count);
+    }
+
+}

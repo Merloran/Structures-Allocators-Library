@@ -29,7 +29,7 @@ enum class EStringTrimStrategy
     All,
 };
 
-template <typename Type>
+template <Manual Type>
 class DynamicArray;
 
 
@@ -64,25 +64,20 @@ public:
 
     Void initialize(AllocatorInfo* allocator = AllocatorInfo::get_default_allocator()) noexcept
     {
+        assert(allocator && "Invalid pointer!");
+
         allocatorInfo = allocator;
-        if (!allocatorInfo)
-        {
-            SPDLOG_WARN("Allocator is nullptr!");
-            return;
-        }
         size = SSO_FLAG;
         smallText[0] = Type();
     }
 
-    Void initialize(const Type* text,
-                    AllocatorInfo* allocator = AllocatorInfo::get_default_allocator()) noexcept
+    Void initialize(const Type *text,
+                    AllocatorInfo *allocator = AllocatorInfo::get_default_allocator()) noexcept
     {
+        assert(allocator && "Invalid pointer!");
+        assert(text && "Invalid pointer!");
+
         allocatorInfo = allocator;
-        if (!allocatorInfo)
-        {
-            SPDLOG_WARN("Allocator is nullptr!");
-            return;
-        }
 
         if (!text)
         {
@@ -101,9 +96,7 @@ public:
         }
 
         capacity = size + 1;
-        elements = static_cast<Type*>(allocatorInfo->allocate(allocator->allocator, 
-                                               capacity * sizeof(Type)));
-
+        elements = Memory::allocate<Type, false>(allocatorInfo, capacity);
         memcpy(elements, text, capacity * sizeof(Type));
     }
 
@@ -115,8 +108,7 @@ public:
             return;
         }
 
-        Type *newElements = static_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator, 
-                                                                                          newCapacity * sizeof(Type)));
+        Type *newElements = Memory::allocate<Type, false>(allocatorInfo, newCapacity);
 
         Bool isSSO = size & SSO_FLAG;
         if (isSSO)
@@ -163,7 +155,7 @@ public:
             return false;
         }
 
-        return std::memcmp(begin(), prefix, prefixSize * sizeof(Type)) == 0;
+        return memcmp(begin(), prefix, prefixSize * sizeof(Type)) == 0;
     }
 
 
@@ -194,7 +186,7 @@ public:
     }
 
 
-    USize find(const BasicString& substring,
+    USize find(const BasicString &substring,
                 const EStringFindStrategy strategy = EStringFindStrategy::First) const noexcept
     {
         const USize substringSize = substring.get_size();
@@ -804,7 +796,7 @@ public:
 
     Void reverse() noexcept
     {
-        Type holder;
+        Type  holder;
         Type *beginElement = begin();
         Type *endElement   = end() - 1;
 
@@ -873,8 +865,7 @@ public:
         {
             elements = source.elements;
         } else {
-            elements = reinterpret_cast<Type*>(allocatorInfo->allocate(allocatorInfo->allocator, 
-                                                        capacity * sizeof(Type)));
+            elements = Memory::allocate<Type, false>(allocatorInfo, capacity);
             memcpy(elements, source.elements, size * sizeof(Type));
         }
     }
@@ -1084,8 +1075,8 @@ public:
 
     // static String format(const CharacterType *fmt, ...);
 
-    template <typename = std::enable_if_t<!std::is_same_v<std::nullptr_t, Type>>>
     static constexpr USize length(const Type *text) noexcept
+    requires !std::is_same_v<std::nullptr_t, Type>
     {
         if constexpr (std::is_same_v<Type, Char> || std::is_same_v<Type, Char8>)
         {
@@ -1140,20 +1131,20 @@ public:
     }
 };
 
-template <typename CharacterType>
-std::ostream &operator<<(std::ostream &os, const BasicString<CharacterType> &string) noexcept
+template <Character Type>
+std::ostream &operator<<(std::ostream &os, const BasicString<Type> &string) noexcept
 {
-    if constexpr (std::is_same_v<CharacterType, Char>)
+    if constexpr (std::is_same_v<Type, Char>)
     {
         return os << string.get_data();
     }
-    else if constexpr (std::is_same_v<CharacterType, Char8>)
+    else if constexpr (std::is_same_v<Type, Char8>)
     {
         return os << reinterpret_cast<const Char *>(string.get_data());
     } else {
         std::wstring wstring;
 
-        for (CharacterType c : string) 
+        for (Type c : string) 
         {
             if (c == 0)
             {

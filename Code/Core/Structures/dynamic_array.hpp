@@ -1,116 +1,86 @@
 #pragma once
 #include "Memory/memory_utils.hpp"
 
-template <typename Type>
+template <Manual Type>
 class DynamicArray
 {
 private:
     static constexpr USize EXPANSION_SIZE = 32;
-    Type *elements;
     AllocatorInfo *allocatorInfo;
+    Type *elements;
     USize capacity, size;
 
 public:
     DynamicArray() noexcept
-    : elements(nullptr)
-    , allocatorInfo(AllocatorInfo::get_default_allocator())
+    : allocatorInfo(AllocatorInfo::get_default_allocator())
+    , elements(nullptr)
     , capacity(0)
     , size(0)
     {}
 
-    Void initialize(AllocatorInfo *allocator = AllocatorInfo::get_default_allocator())
+    Void initialize(AllocatorInfo *allocator = AllocatorInfo::get_default_allocator()) noexcept
     {
+        assert(allocator && "Allocator is nullptr!");
         allocatorInfo = allocator;
     }
 
     Void initialize(const USize initialCapacity, 
-                    AllocatorInfo *allocator = AllocatorInfo::get_default_allocator())
+                    AllocatorInfo *allocator = AllocatorInfo::get_default_allocator()) noexcept
     {
-        allocatorInfo = allocator;
+        assert(allocator && "Allocator is nullptr!");
+        assert(initialCapacity > 0 && "Initial capacity should be bigger than 0!");
 
-        assert(allocatorInfo != nullptr && "Allocator is nullptr!");
+        allocatorInfo = allocator;
 
         capacity = initialCapacity;
         size = 0;
-        elements = reinterpret_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator, 
-                                                                    capacity * sizeof(Type), 
-                                                                    alignof(Type)));
-        fill(Type());
+        elements = Memory::allocate<Type>(allocatorInfo, capacity);
     }
 
     Void initialize(const USize initialSize, 
                     const Type& initialElement, 
-                    AllocatorInfo *allocator = AllocatorInfo::get_default_allocator())
+                    AllocatorInfo *allocator = AllocatorInfo::get_default_allocator()) noexcept
     {
+        assert(allocator && "Allocator is nullptr!");
+        assert(initialSize > 0 && "Initial capacity should be bigger than 0!");
         allocatorInfo = allocator;
-
-        assert(allocatorInfo != nullptr && "Allocator is nullptr!");
 
         capacity = initialSize;
         size = initialSize;
-        elements = reinterpret_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator,
-                                                                    capacity * sizeof(Type), 
-                                                                    alignof(Type)));
+        elements = Memory::allocate<Type>(allocatorInfo, capacity);
+
         fill(initialElement);
     }
 
-    Void reserve(const USize newCapacity)
+    Void reserve(const USize newCapacity) noexcept
     {
         if (newCapacity <= capacity)
         {
             return;
         }
 
-        Type *newElements = reinterpret_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator,
-                                                                             newCapacity * sizeof(Type), 
-                                                                             alignof(Type)));
-        if constexpr (requires(Type obj) { obj.move(std::declval<Type>()); })
+        Type *newElements = Memory::allocate<Type>(allocatorInfo, newCapacity);
+        if constexpr (Moveable<Type>)
         {
             Type *data = newElements;
             const Type *sourceData = elements;
-            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
+            const Type *sourceDataEnd = elements + size;
+            for (; sourceData < sourceDataEnd; ++data, ++sourceData)
             {
-                new (data) Type();
                 data->move(*sourceData);
             }
         }
-        else if constexpr (requires(Type obj) { obj.copy(std::declval<Type>()); })
+        else if constexpr (Copyable<Type>)
         {
             Type *data = newElements;
             const Type *sourceData = elements;
-            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
+            const Type *sourceDataEnd = elements + size;
+            for (; sourceData < sourceDataEnd; ++data, ++sourceData)
             {
-                new (data) Type();
                 data->copy(*sourceData);
             }
-        }
-        else if constexpr (std::is_trivially_copyable_v<Type>)
-        {
-            Type *data = newElements;
-            for (USize i = 0; i < size; ++i, ++data)
-            {
-                new (data) Type();
-            }
+        } else {
             memcpy(newElements, elements, size * sizeof(Type));
-        }
-        else if constexpr (std::is_copy_constructible_v<Type>)
-        {
-            Type *data = elements;
-            const Type *sourceData = elements;
-            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
-            {
-                new (data) Type(*sourceData);
-            }
-        }
-        else if constexpr (std::is_copy_assignable_v<Type>)
-        {
-            Type *data = elements;
-            const Type *sourceData = elements;
-            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
-            {
-                new (data) Type();
-                *data = *sourceData;
-            }
         }
 
         if (elements)
@@ -121,7 +91,7 @@ public:
         capacity = newCapacity;
     }
 
-    Void resize(const USize newSize, const Type &initialElement = {})
+    Void resize(const USize newSize, const Type &initialElement = {}) noexcept
     {
         if (newSize == size)
         {
@@ -130,56 +100,28 @@ public:
 
         if (newSize > capacity)
         {
-            Type *newElements = reinterpret_cast<Type *>(allocatorInfo->allocate(allocatorInfo->allocator,
-                                                                                 newSize * sizeof(Type),
-                                                                                 alignof(Type)));
-            if constexpr (requires(Type obj) { obj.move(std::declval<Type>()); })
+            Type *newElements = Memory::allocate<Type>(allocatorInfo, newSize);
+            if constexpr (Moveable<Type>)
             {
                 Type *data = newElements;
                 const Type *sourceData = elements;
-                for (USize i = 0; i < size; ++i, ++data, ++sourceData)
+                const Type *sourceDataEnd = elements + size;
+                for (; sourceData < sourceDataEnd; ++data, ++sourceData)
                 {
-                    new (data) Type();
                     data->move(*sourceData);
                 }
             }
-            else if constexpr (requires(Type obj) { obj.copy(std::declval<Type>()); })
+            else if constexpr (Copyable<Type>)
             {
                 Type *data = newElements;
                 const Type *sourceData = elements;
-                for (USize i = 0; i < size; ++i, ++data, ++sourceData)
+                const Type *sourceDataEnd = elements + size;
+                for (; sourceData < sourceDataEnd; ++data, ++sourceData)
                 {
-                    new (data) Type();
                     data->copy(*sourceData);
                 }
-            }
-            else if constexpr (std::is_trivially_copyable_v<Type>)
-            {
-                Type *data = newElements;
-                for (USize i = 0; i < size; ++i, ++data)
-                {
-                    new (data) Type();
-                }
+            } else {
                 memcpy(newElements, elements, size * sizeof(Type));
-            }
-            else if constexpr (std::is_copy_constructible_v<Type>)
-            {
-                Type *data = elements;
-                const Type *sourceData = elements;
-                for (USize i = 0; i < size; ++i, ++data, ++sourceData)
-                {
-                    new (data) Type(*sourceData);
-                }
-            }
-            else if constexpr (std::is_copy_assignable_v<Type>)
-            {
-                Type *data = elements;
-                const Type *sourceData = elements;
-                for (USize i = 0; i < size; ++i, ++data, ++sourceData)
-                {
-                    new (data) Type();
-                    *data = *sourceData;
-                }
             }
 
             if (elements)
@@ -201,7 +143,7 @@ public:
         }
     }
 
-    Type &append(const Type &element)
+    Type &append(const Type &element) noexcept
     {
         if (capacity == size)
         {
@@ -212,7 +154,7 @@ public:
         Type &target = elements[size];
         ++size;
 
-        if constexpr (requires(Type obj) { obj.copy(std::declval<Type>()); }) 
+        if constexpr (Copyable<Type>) 
         {
             target.copy(element);
         } else {
@@ -222,7 +164,7 @@ public:
         return target;
     }
 
-    Type &emplace(Type &element)
+    Type &emplace(Type &element) noexcept
     {
         if (capacity == size)
         {
@@ -233,9 +175,13 @@ public:
         Type &target = elements[size];
         ++size;
 
-        if constexpr (requires(Type obj) { obj.move(std::declval<Type>()); })
+        if constexpr (Moveable<Type>)
         {
             target.move(element);
+        }
+        else if (Copyable<Type>)
+        {
+            target.copy(element);
         } else {
             target = element;
         }
@@ -313,72 +259,36 @@ public:
 
         size = source.size;
 
-        if constexpr (requires(Type obj) { obj.copy(std::declval<Type>()); })
+        if constexpr (Copyable<Type>)
         {
             Type *data = elements;
             const Type *sourceData = source.elements;
-            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
+            const Type *sourceDataEnd = elements + size;
+            for (; sourceData < sourceDataEnd; ++data, ++sourceData)
             {
-                new (data) Type();
                 data->copy(*sourceData);
             }
-        }
-        else if constexpr (std::is_trivially_copyable_v<Type>)
-        {
-            Type *data = elements;
-            for (USize i = 0; i < size; ++i, ++data)
-            {
-                new (data) Type();
-            }
+        } else {
             memcpy(elements, source.elements, size * sizeof(Type));
-        }
-        else if constexpr (std::is_copy_constructible_v<Type>)
-        {
-            Type *data = elements;
-            const Type *sourceData = source.elements;
-            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
-            {
-                new (data) Type(*sourceData);
-            }
-        }
-        else if constexpr (std::is_copy_assignable_v<Type>)
-        {
-            Type *data = elements;
-            const Type *sourceData = source.elements;
-            for (USize i = 0; i < size; ++i, ++data, ++sourceData)
-            {
-                new (data) Type();
-                *data = *sourceData;
-            }
         }
     }
 
     Void fill(const Type &value) noexcept
     {
-        if constexpr (requires(Type obj) { obj.copy(Type()); })
+        if constexpr (Copyable<Type>)
         {
             Type *data = elements;
-            for (USize i = 0; i < size; ++i, ++data)
+            const Type *dataEnd = elements + size;
+            for (; data < dataEnd; ++data)
             {
-                new (data) Type();
                 data->copy(value);
             }
-        }
-        else if constexpr (std::is_copy_constructible_v<Type>)
-        {
+        } else {
             Type *data = elements;
-            for (USize i = 0; i < size; ++i, ++data)
+            const Type *dataEnd = elements + size;
+            for (; data < dataEnd; ++data)
             {
-                new (data) Type(value);
-            }
-        }
-        else if constexpr (std::is_copy_assignable_v<Type>)
-        {
-            Type *data = elements;
-            for (USize i = 0; i < size; ++i, ++data)
-            {
-                new (data) Type();
-                *data = value;
+                data = value;
             }
         }
     }
@@ -386,30 +296,20 @@ public:
     Void fill(USize begin, const USize end, const Type &value) noexcept
     {
         assert(begin < size && end <= size);
-        if constexpr (requires(Type obj) { obj.copy(Type()); })
+        if constexpr (Copyable<Type>)
         {
             Type *data = elements + begin;
-            for (USize i = begin; i < end; ++i, ++data)
+            const Type *dataEnd = elements + end;
+            for (; data < dataEnd; ++data)
             {
-                new (data) Type();
                 data->copy(value);
             }
-        }
-        else if constexpr (std::is_copy_constructible_v<Type>)
-        {
+        } else {
             Type *data = elements + begin;
-            for (USize i = begin; i < end; ++i, ++data)
+            const Type *dataEnd = elements + end;
+            for (; data < dataEnd; ++data)
             {
-                new (data) Type(value);
-            }
-        }
-        else if constexpr (std::is_copy_assignable_v<Type>)
-        {
-            Type *data = elements + begin;
-            for (USize i = begin; i < end; ++i, ++data)
-            {
-                new (data) Type();
-                *data = value;
+                data = value;
             }
         }
     }
@@ -488,28 +388,22 @@ public:
         return elements + size;
     }
 
-    Void clear()
+    Void clear() noexcept
     {
-        if constexpr (requires(Type obj) { obj.finalize(); })
+        if constexpr (Finalizable<Type>)
         {
             Type *data = elements;
-            for (USize i = 0; i < size; ++i, ++data)
+            const Type *dataEnd = elements + size;
+            for (; data < dataEnd; ++data)
             {
                 data->finalize();
             }
         }
-        else if constexpr (!std::is_trivially_destructible_v<Type>) 
-        {
-            Type *data = elements;
-            for (USize i = 0; i < size; ++i, ++data)
-            {
-                data->~Type();
-            }
-        }
+
         size = 0;
     }
 
-    Void finalize()
+    Void finalize() noexcept
     {
         if (!elements)
         {

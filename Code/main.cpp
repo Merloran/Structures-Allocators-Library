@@ -2,6 +2,7 @@
 #include <chrono>
 #include <string>
 #include <algorithm>
+#include <memory>
 
 #include "Structures/string.hpp"
 #include "Memory/freelist_allocator.hpp"
@@ -14,8 +15,7 @@ int main()
     StackAllocator aaa{};
     aaa.initialize(8_KiB);
     DynamicArray<Float32> bbb{};
-    bbb.initialize(10, aaa.get_allocator_info());
-
+    std::list<int> ccc;
     aaa.finalize();
     return 0;
 }

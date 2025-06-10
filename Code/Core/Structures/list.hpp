@@ -1,6 +1,6 @@
 #pragma once
 
-template <typename Type>
+template <Manual Type>
 class List
 {
 public:
@@ -9,158 +9,194 @@ public:
         Node *next;
         Node *previous;
         Type  data;
+
+        Node()
+            : next(nullptr)
+            , previous(nullptr)
+            , data(Type())
+        {}
     };
 
     class Iterator
     {
-        Node *lastElement;
+    public:
         Node *currentElement;
 
-        Type &operator*()
+        Iterator() noexcept
+            : currentElement(nullptr)
+        {}
+
+        Type &operator*() noexcept
         {
             return currentElement->data;
         }
 
-        Void operator++()
+        Type *operator->() noexcept
         {
-            assert(currentElement != lastElement);
+            return &currentElement->data;
+        }
+
+        Void operator++() noexcept
+        {
             currentElement = currentElement->next;
         }
 
-        Void operator--()
+        Void operator--() noexcept
         {
-            assert(currentElement != lastElement);
             currentElement = currentElement->previous;
         }
 
-        Bool operator==(const Iterator &other)
+        Bool operator==(const Iterator &other) const noexcept
         {
             return currentElement == other.currentElement;
+        }
+
+        Bool operator!=(const Iterator &other) const noexcept
+        {
+            return currentElement != other.currentElement;
         }
     };
 
 private:
-    Node          lastElement;
     AllocatorInfo *allocatorInfo;
+    Node          *sentinel;
+    USize          size;
 
 public:
     List() noexcept
-        : lastElement(nullptr, nullptr, {})
-        , allocatorInfo(AllocatorInfo::get_default_allocator())
+        : allocatorInfo(AllocatorInfo::get_default_allocator())
+        , sentinel(nullptr)
+        , size(0)
     {}
 
     Void initialize(AllocatorInfo *allocator = AllocatorInfo::get_default_allocator()) noexcept
     {
+        assert(allocatorInfo && "Invalid pointer!");
         allocatorInfo = allocator;
+
+        sentinel = Memory::allocate<Node>(allocatorInfo);
+
+        sentinel->next     = sentinel;
+        sentinel->previous = sentinel;
     }
 
     Void initialize(const Type &initialElement,
                     AllocatorInfo *allocator = AllocatorInfo::get_default_allocator()) noexcept
     {
+        assert(allocatorInfo && "Invalid pointer!");
         allocatorInfo = allocator;
 
-        if (!allocatorInfo)
-        {
-            SPDLOG_WARN("Allocator is nullptr!");
-            return;
-        }
+        sentinel = Memory::allocate<Node>(allocatorInfo);
 
-        Node* firstElement = static_cast<Node *>(allocatorInfo->allocate(allocatorInfo->allocator, sizeof(Node)));
-        if constexpr (requires(Type obj) { obj.copy(std::declval<Type>()); })
-        {
-            firstElement->data.copy(initialElement);
-        } else {
-            *firstElement->data = initialElement;
-        }
-        lastElement.next       = firstElement;
-        lastElement.previous   = firstElement;
-
-        firstElement->next     = &lastElement;
-        firstElement->previous = &lastElement;
+        sentinel->next     = sentinel;
+        sentinel->previous = sentinel;
     }
 
     Type &push_back(const Type &element) noexcept
     {
-        Node *target = static_cast<Node *>(allocatorInfo->allocate(allocatorInfo->allocator, sizeof(Node)));
-        if constexpr (requires(Type obj) { obj.copy(std::declval<Type>()); })
+        Node *target = Memory::allocate<Node>(allocatorInfo);
+        if constexpr (Copyable<Type>)
         {
             target->data.copy(element);
         } else {
-            *target->data = element;
+            target->data = element;
         }
-        
-        target->next     = &lastElement;
-        target->previous = lastElement.previous;
 
-        lastElement.previous->next = target;
-        lastElement.previous       = target;
+        target->previous = sentinel->previous;
+        target->next     = sentinel;
+
+        sentinel->previous->next = target;
+        sentinel->previous       = target;
+
+        ++size;
 
         return target->data;
     }
 
     Type &push_front(const Type &element) noexcept
     {
-        Node *target = static_cast<Node *>(allocatorInfo->allocate(allocatorInfo->allocator, sizeof(Node)));
-        if constexpr (requires(Type obj) { obj.copy(std::declval<Type>()); })
+        Node *target = Memory::allocate<Node>(allocatorInfo);
+        if constexpr (Copyable<Type>)
         {
             target->data.copy(element);
         } else {
-            *target->data = element;
+            target->data = element;
         }
+        
+        target->next     = sentinel->next;
+        target->previous = sentinel;
 
-        target->previous = &lastElement;
-        target->next     = lastElement.next;
+        sentinel->next->previous = target;
+        sentinel->next           = target;
 
-        lastElement.next->previous = target;
-        lastElement.next           = target;
+        ++size;
 
         return target->data;
     }
 
     Type &emplace_back(Type &element) noexcept
     {
-        Node *target = static_cast<Node *>(allocatorInfo->allocate(allocatorInfo->allocator, sizeof(Node)));
-        if constexpr (requires(Type obj) { obj.move(std::declval<Type>()); })
+        Node *target = Memory::allocate<Node>(allocatorInfo);
+        if constexpr (Moveable<Type>)
         {
             target->data.move(element);
+        }
+        else if constexpr (Copyable<Type>)
+        {
+            target->data.copy(element);
         } else {
             target->data = element;
         }
-        
-        target->next     = &lastElement;
-        target->previous = lastElement.previous;
 
-        lastElement.previous->next = target;
-        lastElement.previous       = target;
+        target->previous = sentinel->previous;
+        target->next     = sentinel;
+
+        sentinel->previous->next = target;
+        sentinel->previous       = target;
+
+        ++size;
 
         return target->data;
     }
 
     Type &emplace_front(Type &element) noexcept
     {
-        Node *target = static_cast<Node *>(allocatorInfo->allocate(allocatorInfo->allocator, sizeof(Node)));
-        if constexpr (requires(Type obj) { obj.move(std::declval<Type>()); })
+        Node *target = Memory::allocate<Node>(allocatorInfo);
+        if constexpr (Moveable<Type>)
         {
             target->data.move(element);
+        }
+        else if constexpr (Copyable<Type>)
+        {
+            target->data.copy(element);
         } else {
             target->data = element;
         }
+        
+        target->next     = sentinel->next;
+        target->previous = sentinel;
 
-        target->previous = &lastElement;
-        target->next     = lastElement.next;
+        sentinel->next->previous = target;
+        sentinel->next           = target;
 
-        lastElement.next->previous = target;
-        lastElement.next           = target;
+        ++size;
 
         return target->data;
     }
 
-    Type *begin() noexcept
+    Void pop_back() noexcept
     {
+        
     }
 
-    Type *end() noexcept
+    Iterator begin() noexcept
     {
+        return Iterator{ sentinel->next };
+    }
+
+    Iterator end() noexcept
+    {
+        return Iterator{ sentinel };
     }
 
     Void move(List &source) noexcept
@@ -172,7 +208,7 @@ public:
 
         finalize();
         allocatorInfo = source.allocatorInfo;
-        lastElement   = source.lastElement;
+        sentinel      = source.sentinel;
 
         source = {};
     }
@@ -187,51 +223,23 @@ public:
         finalize();
         initialize(source.allocatorInfo);
 
-
-        if constexpr (requires(Type obj) { obj.copy(std::declval<Type>()); })
+        for (const Type &element : source)
         {
-            for (Node *node = source.lastElement->next; node != source.lastElement; node = node->next)
-            {
-                data->copy(*sourceData);
-            }
+            push_front(element);
         }
-        else if constexpr (std::is_trivially_copyable_v<Type>)
-        {
-            memcpy(elements, source.elements, size * sizeof(Type));
-        } else {
-            Type *data = elements;
-            const Type *sourceData = source.elements;
-            for (USize i = size; i > 0; --i, ++data, ++sourceData)
-            {
-                *data = *sourceData;
-            }
-        }
-    }
-
-    Void swap(USize left, USize right) noexcept
-    {
-        assert(left < size && right < size);
-        const Type &temporary = elements[left];
-        elements[left] = elements[right];
-        elements[right] = temporary;
     }
 
     [[nodiscard]]
     Bool contains(const Type &value) const noexcept
     {
-        if constexpr (std::is_trivial_v<Type> && sizeof(Type) == 1)
+        for (const Type &element : *this)
         {
-            return std::memchr(elements, value, size) != nullptr;
-        } else {
-            for (USize i = 0; i < size; ++i)
+            if (element == value)
             {
-                if (elements[i] == value)
-                {
-                    return true;
-                }
+                return true;
             }
-            return false;
         }
+        return false;
     }
 
     [[nodiscard]]
@@ -241,67 +249,76 @@ public:
     }
 
     [[nodiscard]]
-    inline const Type &operator[](USize index) const noexcept
+    const Type &operator[](const USize index) const noexcept
     {
         assert(index < size);
-        return elements[index];
-    }
-
-    [[nodiscard]]
-    const Type *get_data() const noexcept
-    {
-        assert(size > 0);
-        return elements;
-    }
-
-    [[nodiscard]]
-    const Type *begin() const noexcept
-    {
-        assert(size > 0);
-        return elements;
-    }
-
-    [[nodiscard]]
-    const Type *end() const noexcept
-    {
-        assert(size > 0);
-        return elements + size;
-    }
-
-    Void clear()
-    {
-        if constexpr (requires(Type obj) { obj.finalize(); })
+        if (index < size / 2)
         {
-            Type *data = elements;
-            for (USize i = size; i > 0; --i, ++data)
+            Iterator iterator = begin();
+            for (USize i = 0; i < index; ++i)
             {
-                data->finalize();
+                ++iterator;
             }
-        } else if constexpr (!std::is_trivially_destructible_v<Type>)
+            return *iterator;
+        }
+
+        const USize reversedIndex = size - 1 - index;
+        Iterator iterator = end();
+        for (USize i = 0; i < reversedIndex; ++i) 
         {
-            Type *data = elements;
-            for (USize i = size; i > 0; --i, ++data)
+            --iterator;
+        }
+        return *iterator;
+    }
+
+    [[nodiscard]]
+    Iterator begin() const noexcept
+    {
+        return Iterator{ sentinel->next };
+    }
+
+    [[nodiscard]]
+    Iterator end() const noexcept
+    {
+        return Iterator{ sentinel };
+    }
+
+    Void clear() noexcept
+    {
+        if constexpr (Finalizable<Type>)
+        {
+            for (Iterator iterator = begin(); iterator != end();)
             {
-                data->~Type();
+                iterator->finalize();
+                Node *toRemove = iterator.currentElement;
+                ++iterator;
+                allocatorInfo->deallocate(allocatorInfo->allocator, byte_cast(toRemove));
+            }
+        } else {
+            for (Iterator iterator = begin(); iterator != end();)
+            {
+                Node *toRemove = iterator.currentElement;
+                ++iterator;
+                allocatorInfo->deallocate(allocatorInfo->allocator, byte_cast(toRemove));
             }
         }
+        sentinel->previous = sentinel;
+        sentinel->next     = sentinel;
         size = 0;
     }
 
-    Void finalize()
+    Void finalize() noexcept
     {
-        if (!elements)
+        assert(allocatorInfo);
+        if (!sentinel)
         {
             *this = {};
             return;
         }
 
         clear();
+        allocatorInfo->deallocate(allocatorInfo->allocator, byte_cast(sentinel));
 
-        if (allocatorInfo)
-        {
-            allocatorInfo->deallocate(allocatorInfo->allocator, elements);
-        }
         *this = {};
     }
 };

@@ -35,20 +35,13 @@ public:
     [[nodiscard]]
     Type *allocate() noexcept
     {
-        return new (allocate(sizeof(Type), alignof(Type))) Type();
+        return Memory::start_object<Type>(allocate(sizeof(Type), alignof(Type)));
     }
     template <typename Type>
     [[nodiscard]]
     Type *allocate(const USize count) noexcept
     {
-        Type *mem = reinterpret_cast<Type *>(allocate(count * sizeof(Type), alignof(Type)));
-
-        for (USize i = 0; i < count; ++i)
-        {
-            new (&mem[i]) Type();
-        }
-
-        return mem;
+        return Memory::start_object<Type>(allocate(count * sizeof(Type), alignof(Type)), count);
     }
 
     Void deallocate(Byte *pointer) noexcept;
