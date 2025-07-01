@@ -24,28 +24,21 @@ public:
     Void initialize(USize bytes, AllocatorInfo *allocatorInfo) noexcept;
 
     Byte *allocate(USize bytes, USize alignment) noexcept;
-    template <typename Type>
+    template <Manual Type>
     [[nodiscard]]
     Type *allocate() noexcept
     {
-        return new (allocate(sizeof(Type), alignof(Type))) Type();
+        return Memory::start_object<Type>(allocate(sizeof(Type), alignof(Type)));
     }
-    template <typename Type>
+    template <Manual Type>
     [[nodiscard]]
     Type *allocate(const USize count) noexcept
     {
-        Type *mem = reinterpret_cast<Type *>(allocate(count * sizeof(Type), alignof(Type)));
-
-        for (USize i = 0; i < count; ++i)
-        {
-            new (&mem[i]) Type();
-        }
-
-        return mem;
+        return Memory::start_object<Type>(allocate(count * sizeof(Type), alignof(Type)), count);
     }
 
     Void deallocate(Byte *pointer) noexcept;
-    template <typename Type>
+    template <Manual Type>
     Void deallocate(Type *pointer) noexcept
     {
         deallocate(byte_cast(pointer));

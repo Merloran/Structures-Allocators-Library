@@ -3,7 +3,7 @@
 Void StackAllocator::initialize(const USize bytes) noexcept
 {
     offset = 0;
-    capacity = align_memory(bytes);
+    capacity = align_system_memory(bytes);
     memory = byte_cast(VirtualAlloc(nullptr, 
                                            capacity, 
                                            MEM_RESERVE | MEM_COMMIT, 

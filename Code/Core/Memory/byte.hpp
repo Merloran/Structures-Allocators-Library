@@ -1,13 +1,14 @@
 #pragma once
 //TODO: Think of linux support
 #if defined(_WIN32)
+#define NOMINMAX
 #include <windows.h>
 static constexpr USize GET_PAGE_SIZE()
 {
     return 4096;
 }
 
-constexpr USize align_memory(const USize bytes)
+constexpr USize align_system_memory(const USize bytes)
 {
     return (bytes + GET_PAGE_SIZE() - 1) & ~(GET_PAGE_SIZE() - 1);
 }

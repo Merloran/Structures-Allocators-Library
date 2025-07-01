@@ -2,8 +2,9 @@
 
 Void PoolAllocator::initialize(const USize count, const USize size) noexcept
 {
+    assert(size % sizeof(Void *) == 0 && "Block size must be multiple of pointer size!");
     blockSize = size;
-    capacity = align_memory(count * size);
+    capacity = align_system_memory(count * blockSize);
     memory = byte_cast(VirtualAlloc(nullptr, 
                                            capacity, 
                                            MEM_RESERVE | MEM_COMMIT, 
@@ -22,11 +23,11 @@ Void PoolAllocator::initialize(const USize count, const USize size) noexcept
         static_cast<PoolAllocator *>(allocator)->deallocate(pointer);
     };
 
-    freeList = new (memory) PoolBlock();
+    freeList = Memory::start_object<PoolBlock>(memory);
     PoolBlock *current = freeList;
     for (USize i = 0; i < count; ++i)
     {
-        current->next = new (memory + i * blockSize) PoolBlock();
+        current->next = Memory::start_object<PoolBlock>(memory + i * blockSize);
         current = current->next;
     }
     current->next = nullptr;
@@ -34,10 +35,11 @@ Void PoolAllocator::initialize(const USize count, const USize size) noexcept
 
 Void PoolAllocator::initialize(const USize count, const USize size, AllocatorInfo *allocatorInfo) noexcept
 {
+    assert(parentInfo != nullptr && "Parent allocator is nullptr!");
+    assert(size % sizeof(Void *) == 0 && "Block size must be divisible by max possible align type");
+
     blockSize = size;
     parentInfo = allocatorInfo;
-
-    assert(parentInfo != nullptr && "Parent allocator is nullptr!");
 
     selfInfo.allocator = this;
     selfInfo.allocate = [](Void *allocator, USize bytes, USize alignment) -> Byte *
@@ -50,20 +52,20 @@ Void PoolAllocator::initialize(const USize count, const USize size, AllocatorInf
         static_cast<PoolAllocator *>(allocator)->deallocate(pointer);
     };
 
-    capacity = count * size;
+    capacity = count * blockSize;
     memory = parentInfo->allocate(parentInfo->allocator, capacity, alignof(PoolBlock));
 
-    freeList = new (memory) PoolBlock();
+    freeList = Memory::start_object<PoolBlock, false>(memory);
     PoolBlock *current = freeList;
     for (USize i = 0; i < count; ++i)
     {
-        current->next = new (memory + i * blockSize) PoolBlock();
+        current->next = Memory::start_object<PoolBlock, false>(memory + i * blockSize);
         current = current->next;
     }
     current->next = nullptr;
 }
 
-Byte* PoolAllocator::allocate(const USize bytes, [[maybe_unused]] const USize alignment) noexcept
+Byte* PoolAllocator::allocate([[maybe_unused]] const USize bytes, [[maybe_unused]] const USize alignment) noexcept
 {
     assert(bytes <= blockSize && "Requested too much memory!");
     assert(freeList != nullptr && "Out of memory!");
@@ -80,7 +82,7 @@ Void PoolAllocator::deallocate(Byte *pointer) noexcept
 
     pointer -= offset % blockSize;
 
-    PoolBlock *freeBlock = new (pointer) PoolBlock();
+    PoolBlock *freeBlock = Memory::start_object<PoolBlock, false>(pointer);
     freeBlock->next = freeList;
     freeList = freeBlock;
 }

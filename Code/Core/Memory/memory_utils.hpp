@@ -16,7 +16,7 @@ struct AllocatorInfo
         {
             nullptr,
             [](Void *allocator, USize bytes, USize alignment) -> Byte *{ return byte_cast(_aligned_malloc(bytes, alignment)); },
-            [](Void *allocator, Byte *pointer) { free(pointer); }
+            [](Void *allocator, Byte *pointer) { _aligned_free(pointer); }
         };
         return &defaultAllocator;
     }
@@ -24,6 +24,15 @@ struct AllocatorInfo
 
 namespace Memory
 {
+    constexpr USize align_binary_safe(const USize value) noexcept
+    {
+        if (value <= USize(8))
+        {
+            return USize(8);
+        }
+        return USize(1) << std::bit_width(value - USize(1));
+    }
+
     template<Manual Type, Bool CallConstructor = true>
     Type *start_object(Byte *memory) noexcept
     {

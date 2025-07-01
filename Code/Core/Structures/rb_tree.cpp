@@ -91,20 +91,19 @@ Void RBTree::remove(RBNodePacked* node) noexcept
     }
 }
 
-RBNodePacked* RBTree::split_node(RBNodePacked* node, const USize requestedBytes) const noexcept
+RBNodePacked* RBTree::split_node(RBNodePacked* node, const USize requestedBytes, const USize alignment) noexcept
 {
+    node = align_node(node, alignment);
+
     if (node->get_size() - requestedBytes <= sizeof(RBNodePacked))
     {
-        return nullptr;
+        return node;
     }
 
-    Byte *nodeEnd = node->get_memory() + requestedBytes;
-    const USize splitNodePadding = sizeof(RBNodePacked) - (USize(nodeEnd) % sizeof(RBNodePacked));
-
-    RBNodePacked *splitNode = new (node->get_memory() + requestedBytes + splitNodePadding) RBNodePacked();
+    RBNodePacked *splitNode = Memory::start_object<RBNodePacked>(node->get_memory() + requestedBytes);
     RBNodePacked *next = node->get_next();
     splitNode->set_size(node->get_size() - (requestedBytes + sizeof(RBNodePacked)));
-    node->set_size(requestedBytes + splitNodePadding);
+    node->set_size(requestedBytes);
     splitNode->set_free(true);
     splitNode->set_previous(node, memory);
     splitNode->set_next(next);
@@ -113,7 +112,9 @@ RBNodePacked* RBTree::split_node(RBNodePacked* node, const USize requestedBytes)
         next->set_previous(splitNode, memory);
     }
     node->set_next(splitNode);
-    return splitNode;
+
+    insert(splitNode, false);
+    return node;
 }
 
 Void RBTree::coalesce(RBNodePacked* node) noexcept
@@ -208,6 +209,27 @@ Void RBTree::clear() noexcept
 {
     root = nullptr;
     memory = nullptr;
+}
+
+RBNodePacked* RBTree::align_node(RBNodePacked* node, const USize alignment) const noexcept
+{
+    const USize padding = alignment - (USize(node->get_memory()) & (alignment - 1));
+
+    if (padding == alignment) 
+    {
+        return node;
+    }
+
+    if (RBNodePacked *previous = node->get_previous(memory)) 
+    {
+        previous->set_size(previous->get_size() + padding);
+    }
+    node->set_size(node->get_size() - padding);
+
+    Byte *newNode = byte_cast(node) + padding;
+    memmove(newNode, node, sizeof(RBNodePacked));
+
+    return Memory::start_object<RBNodePacked, false>(newNode);
 }
 
 Bool RBTree::contains(const RBNodePacked* node) const noexcept
@@ -317,7 +339,7 @@ RBNodePacked* RBTree::get_min(RBNodePacked* node) const noexcept
     return current;
 }
 
-Void RBTree::fix_insert(const RBNodePacked* node) noexcept
+Void RBTree::fix_insert(RBNodePacked* node) noexcept
 {
     while (node != root &&
            node->get_color() == RBNodePacked::EColor::Red &&

@@ -20,6 +20,7 @@ using UInt32  = uint32_t;
 using UInt64  = uint64_t;
 
 using USize   = size_t;
+using SSize   = ptrdiff_t;
 
 using Float32 = float;
 using Float64 = double;

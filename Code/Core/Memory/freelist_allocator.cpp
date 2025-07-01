@@ -5,7 +5,7 @@
 
 Void FreeListAllocator::initialize(const USize bytes) noexcept
 {
-    capacity = align_memory(bytes + sizeof(RBNodePacked));
+    capacity = align_system_memory(bytes + sizeof(RBNodePacked));
     memory = byte_cast(VirtualAlloc(nullptr, 
                                            capacity, 
                                            MEM_RESERVE | MEM_COMMIT, 
@@ -25,17 +25,16 @@ Void FreeListAllocator::initialize(const USize bytes) noexcept
     };
 
     freeBlocks = { memory };
-    RBNodePacked *root = new (memory) RBNodePacked();
-    *root = {};
+    RBNodePacked *root = Memory::start_object<RBNodePacked>(memory);
     root->set_size(capacity - sizeof(RBNodePacked));
     freeBlocks.insert(root);
+    print_list();
 }
 
 Void FreeListAllocator::initialize(const USize bytes, AllocatorInfo *allocatorInfo) noexcept
 {
+    assert(allocatorInfo != nullptr && "Parent allocator is nullptr!");
     parentInfo = allocatorInfo;
-
-    assert(parentInfo != nullptr && "Parent allocator is nullptr!");
 
     selfInfo.allocator = this;
     selfInfo.allocate = [](Void *allocator, const USize bytes, const USize alignment) -> Byte *
@@ -51,23 +50,20 @@ Void FreeListAllocator::initialize(const USize bytes, AllocatorInfo *allocatorIn
     capacity = bytes + sizeof(RBNodePacked);
     memory = parentInfo->allocate(parentInfo->allocator, capacity, alignof(RBNodePacked));
     freeBlocks = { memory };
-    RBNodePacked *root = new (memory) RBNodePacked();
-    *root = {};
+    RBNodePacked *root = Memory::start_object<RBNodePacked>(memory);
     root->set_size(capacity - sizeof(RBNodePacked));
     freeBlocks.insert(root);
+    print_list();
 }
 
-Byte* FreeListAllocator::allocate(const USize bytes, const USize alignment) noexcept
+Byte* FreeListAllocator::allocate(USize bytes, USize alignment) noexcept
 {
+    assert(bytes > USize(0) && "Invalid allocation!");
+    alignment = Memory::align_binary_safe(alignment);
+    bytes += (sizeof(Void *) - (bytes & (sizeof(Void *) - 1))) & (sizeof(Void *) - 1);
     RBNodePacked *data = freeBlocks.find(bytes + alignment - USize(1));
     freeBlocks.remove(data);
-    const USize padding = alignment - (USize(data->get_memory()) % alignment);
-    data->set_padding(padding);
-    RBNodePacked *splitNode = freeBlocks.split_node(data, bytes + padding);
-    if (splitNode)
-    {
-        freeBlocks.insert(splitNode, false);
-    }
+    data = freeBlocks.split_node(data, bytes, alignment);
     return data->get_memory();
 }
 
@@ -75,7 +71,7 @@ Void FreeListAllocator::deallocate(Byte* pointer) noexcept
 {
     assert(pointer != nullptr && "Null pointer cannot be deallocated!");
     assert(memory + capacity > pointer && "Pointer out of scope!");
-    RBNodePacked *node = new (pointer - sizeof(RBNodePacked)) RBNodePacked();
+    RBNodePacked *node = reinterpret_cast<RBNodePacked *>(pointer - sizeof(RBNodePacked));
     freeBlocks.insert(node);
 }
 
@@ -99,17 +95,17 @@ Void FreeListAllocator::move(FreeListAllocator& source) noexcept
     assert(this != &source && "Attempted to move allocator into itself!");
 
     finalize();
-    parentInfo    = source.parentInfo;
-    freeBlocks    = source.freeBlocks;
-    memory        = source.memory;
-    capacity      = source.capacity;
+    parentInfo = source.parentInfo;
+    freeBlocks = source.freeBlocks;
+    memory     = source.memory;
+    capacity   = source.capacity;
 
     source = {};
 }
 
 Void FreeListAllocator::print_list() noexcept
 {
-    RBNodePacked *node = reinterpret_cast<RBNodePacked*>(memory + sizeof(RBNodePacked));
+    RBNodePacked *node = reinterpret_cast<RBNodePacked*>(memory);
     while (node)
     {
         printf("%llu(%s)->", node->get_size(), node->is_free() ? "free" : "reserved");

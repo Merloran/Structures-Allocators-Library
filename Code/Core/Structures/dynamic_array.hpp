@@ -250,7 +250,7 @@ public:
         source = {};
     }
 
-    Void copy(const DynamicArray &source) noexcept
+    Void copy(const DynamicArray &source) const noexcept
     {
         assert(&source != this && "Tried to copy dynamic array into itself!");
 

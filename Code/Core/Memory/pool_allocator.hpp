@@ -31,13 +31,13 @@ public:
     Void initialize(USize count, USize size, AllocatorInfo *allocatorInfo) noexcept;
 
     Byte *allocate(USize bytes, USize alignment) noexcept;
-    template <typename Type>
+    template <Manual Type>
     [[nodiscard]]
     Type *allocate() noexcept
     {
         return Memory::start_object<Type>(allocate(sizeof(Type), alignof(Type)));
     }
-    template <typename Type>
+    template <Manual Type>
     [[nodiscard]]
     Type *allocate(const USize count) noexcept
     {
@@ -45,7 +45,7 @@ public:
     }
 
     Void deallocate(Byte *pointer) noexcept;
-    template <typename Type>
+    template <Manual Type>
     Void deallocate(Type *pointer) noexcept
     {
         deallocate(byte_cast(pointer));

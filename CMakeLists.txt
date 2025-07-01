@@ -11,23 +11,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 find_package(spdlog CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 
-function(disable_warnings targetLib)
-    if(NOT TARGET ${targetLib})
-        return()
-    endif()
-  
-    get_target_property(targetType ${targetLib} TYPE)
-    if("${targetType}" STREQUAL "INTERFACE_LIBRARY")
-        return()
-    endif()
-  
-    if(MSVC)
-        target_compile_options(${targetLib} PRIVATE /w)
-    else()
-        target_compile_options(${targetLib} PRIVATE -w)
-    endif()
-endfunction()
-
 add_executable(${targetName} "Code/main.cpp")
 
 file(GLOB_RECURSE sourceFiles
@@ -48,10 +31,9 @@ foreach(sourceFile IN ITEMS ${sourceFiles})
     source_group("Project\\${groupPath}" FILES "${sourceFile}")
 endforeach()
 
-
 target_link_libraries(${targetName} PRIVATE spdlog::spdlog)
 target_link_libraries(${targetName} PRIVATE magic_enum::magic_enum)
-  
+
 # Precompiled headers and force include for pch
 target_precompile_headers(${targetName} PRIVATE Code/Core/Utilities/pch.hpp)
 if (MSVC)

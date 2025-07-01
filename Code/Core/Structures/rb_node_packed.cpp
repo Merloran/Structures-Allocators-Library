@@ -69,18 +69,9 @@ Bool RBNodePacked::is_free() const noexcept
     return !result;
 }
 
-USize RBNodePacked::get_padding() const noexcept
-{
-    constexpr USize DATA_OFFSET = 22;
-    USize alignment;
-    memcpy(&alignment, data + DATA_OFFSET, 2);
-    alignment = (alignment >> 3) & 0x3F;
-    return alignment;
-}
-
 Byte *RBNodePacked::get_memory() const noexcept
 {
-    return byte_cast(const_cast<RBNodePacked *>(this)) + sizeof(RBNodePacked) + get_padding();
+    return byte_cast(const_cast<RBNodePacked *>(this)) + sizeof(RBNodePacked);
 }
 
 Void RBNodePacked::set_parent(RBNodePacked* parent, const Byte* memory) noexcept
@@ -160,7 +151,7 @@ Void RBNodePacked::set_previous(RBNodePacked* previous, const Byte* memory) noex
 
 Void RBNodePacked::set_size(const USize size) noexcept
 {
-    assert(size > MAX_NODE_SIZE && "Node size is too large!");
+    assert(size <= MAX_NODE_SIZE && "Node size is too large!");
     constexpr USize DATA_OFFSET = 18;
     // Set first 4 bytes to data
     memcpy(data + DATA_OFFSET, &size, 4);
@@ -189,18 +180,6 @@ Void RBNodePacked::set_free(const Bool isFree) noexcept
     } else {
         data[DATA_OFFSET] &= ~0x40_B;
     }
-}
-
-Void RBNodePacked::set_padding(const USize padding) noexcept
-{
-    constexpr USize DATA_OFFSET = 22;
-
-    USize source;
-    memcpy(&source, data + DATA_OFFSET, 2);
-    source &= ~(0x3F << 3);
-    source |= (padding & 0x3F) << 3;
-
-    memcpy(data + DATA_OFFSET, &source, 2);
 }
 
 Void RBNodePacked::reset() noexcept

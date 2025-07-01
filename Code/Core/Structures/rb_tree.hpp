@@ -23,7 +23,7 @@ public:
 
     Void remove(RBNodePacked *node) noexcept;
 
-    RBNodePacked *split_node(RBNodePacked *node, USize requestedBytes) const noexcept;
+    RBNodePacked *split_node(RBNodePacked *node, USize requestedBytes, USize alignment) noexcept;
 
     Void coalesce(RBNodePacked *node) noexcept;
 
@@ -34,6 +34,8 @@ public:
     Void clear() noexcept;
 
 private:
+    RBNodePacked *align_node(RBNodePacked *node, USize alignment) const noexcept;
+
     Bool contains(const RBNodePacked *node) const noexcept;
 
     Void rotate_left(RBNodePacked *node) noexcept;
@@ -44,7 +46,7 @@ private:
 
     RBNodePacked *get_min(RBNodePacked *node) const noexcept;
 
-    Void fix_insert(const RBNodePacked *node) noexcept;
+    Void fix_insert(RBNodePacked *node) noexcept;
 
     Void fix_remove(RBNodePacked *node) noexcept;
 
