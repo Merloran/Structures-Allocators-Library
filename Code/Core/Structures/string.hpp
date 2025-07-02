@@ -123,7 +123,7 @@ public:
         if (elements)
         {
             memcpy(newElements, elements, (size + 1) * sizeof(Type));
-            allocatorInfo->deallocate(allocatorInfo->allocator, elements);
+            Memory::deallocate(allocatorInfo, elements);
         }
         elements = newElements;
         elements[size] = Type();
@@ -1069,7 +1069,7 @@ public:
         }
 
         clear();
-        allocatorInfo->deallocate(allocatorInfo->allocator, elements);
+        Memory::deallocate(allocatorInfo, elements);
         *this = {};
     }
 

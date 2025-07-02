@@ -86,4 +86,10 @@ namespace Memory
                                                    count);
     }
 
+    template <Manual Type>
+    Void deallocate(AllocatorInfo *allocatorInfo, Type *element)
+    {
+        allocatorInfo->deallocate(allocatorInfo->allocator, byte_cast(element));
+    }
+
 }

@@ -85,7 +85,7 @@ public:
 
         if (elements)
         {
-            allocatorInfo->deallocate(allocatorInfo->allocator, elements);
+            Memory::deallocate(allocatorInfo, elements);
         }
         elements = newElements;
         capacity = newCapacity;
@@ -126,7 +126,7 @@ public:
 
             if (elements)
             {
-                allocatorInfo->deallocate(allocatorInfo->allocator, elements);
+                Memory::deallocate(allocatorInfo, elements);
             }
             const USize oldSize = size;
             size = newSize;
@@ -415,7 +415,7 @@ public:
 
         if (allocatorInfo)
         {
-            allocatorInfo->deallocate(allocatorInfo->allocator, elements);
+            Memory::deallocate(allocatorInfo, elements);
         }
         *this = {};
     }

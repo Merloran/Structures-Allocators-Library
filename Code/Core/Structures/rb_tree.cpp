@@ -1,6 +1,6 @@
 #include "rb_tree.hpp"
 #include "rb_node_packed.hpp"
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 
 Void RBTree::insert(RBNodePacked* node, const Bool shouldCoalesce) noexcept
 {
