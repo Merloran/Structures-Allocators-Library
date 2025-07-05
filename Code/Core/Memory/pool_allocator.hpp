@@ -14,8 +14,8 @@ private:
     AllocatorInfo *parentInfo;
     Byte          *memory;
     PoolBlock     *freeList;
-    USize        capacity;
-    USize        blockSize;
+    USize         capacity;
+    USize         blockSize;
 
 public:
     PoolAllocator()
@@ -54,6 +54,12 @@ public:
     Void copy(const PoolAllocator &source) noexcept;
 
     Void move(PoolAllocator &source) noexcept;
+
+    [[nodiscard]]
+    USize get_capacity() const noexcept;
+
+    [[nodiscard]]
+    USize get_block_size() const noexcept;
 
     Void finalize() noexcept;
 

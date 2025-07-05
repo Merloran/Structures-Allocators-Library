@@ -28,7 +28,8 @@ using Float64 = double;
 template <typename Type>
 concept Manual =
 std::is_trivially_copyable_v<Type> &&
-std::is_nothrow_default_constructible_v<Type>;
+std::is_nothrow_default_constructible_v<Type> ||
+std::is_same_v<Type, Void>;
 
 template <typename Type>
 concept Copyable =

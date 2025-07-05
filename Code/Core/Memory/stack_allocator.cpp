@@ -97,6 +97,11 @@ Void StackAllocator::move(StackAllocator& source) noexcept
     source = {};
 }
 
+USize StackAllocator::get_capacity() const noexcept
+{
+    return capacity;
+}
+
 Void StackAllocator::finalize() noexcept
 {
     if (!memory)

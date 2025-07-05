@@ -3,6 +3,8 @@
 
 #include <codecvt>
 
+#include "Utilities/cryptography.hpp"
+
 template <typename Type>
 concept Character =
 std::is_same_v<Type, Char  > || 
@@ -806,21 +808,25 @@ public:
         }
     }
 
-    Void remove(const USize position, const USize length) noexcept
+    USize remove(const USize position, const USize length) noexcept
     {
         const USize selfSize = size & ~SSO_FLAG;
-        assert(position + length <= selfSize);
+        if (position + length > selfSize)
+        {
+            return 0;
+        }
 
         Type *elementsDestination = begin() + position;
         Type *elementsToMove      = elementsDestination + length;
-        const USize   elementsSize        = selfSize - (position + length);
+        const USize elementsSize  = selfSize - (position + length);
 
         memcpy(elementsDestination, elementsToMove, elementsSize);
         size -= length;
         *end() = Type();
+        return length;
     }
 
-    Void remove(Type character) noexcept
+    USize remove(Type character) noexcept
     {
         USize offset = 0;
         for (Type *element = begin(); *element != Type(); ++element)
@@ -834,6 +840,7 @@ public:
         }
         size -= offset;
         *end() = Type();
+        return offset;
     }
 
     Void move(BasicString &source) noexcept
@@ -893,7 +900,14 @@ public:
         return size & SSO_FLAG ? SSO_CAPACITY : capacity;
     }
 
-    // UInt64 hash() const;
+    UInt64 hash() const noexcept
+    {
+        if (size & SSO_FLAG)
+        {
+            return Cryptography::hash(smallText, size & ~SSO_FLAG);
+        }
+        return Cryptography::hash(elements, size & ~SSO_FLAG);
+    }
 
     Type *get_data() noexcept
     {

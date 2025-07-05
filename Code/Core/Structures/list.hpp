@@ -359,6 +359,10 @@ public:
 
         --size;
 
+        if constexpr (Finalizable<Type>)
+        {
+            target->data.finalize();
+        }
         Memory::deallocate(allocatorInfo, target);
         return element;
     }
@@ -385,6 +389,10 @@ public:
 
         --size;
 
+        if constexpr (Finalizable<Type>)
+        {
+            target->data.finalize();
+        }
         Memory::deallocate(allocatorInfo, target);
         return element;
     }
@@ -417,6 +425,10 @@ public:
 
             --size;
 
+            if constexpr (Finalizable<Type>)
+            {
+                current.get_node()->data.finalize();
+            }
             Memory::deallocate(allocatorInfo, current.get_node());
             break;
         }
@@ -442,14 +454,22 @@ public:
 
         --size;
 
+        if constexpr (Finalizable<Type>)
+        {
+            toPop.get_node()->data.finalize();
+        }
         Memory::deallocate(allocatorInfo, toPop.get_node());
-
         return element;
     }
 
 
-    Void drop_back() noexcept
+    USize remove_back() noexcept
     {
+        if (size == 0)
+        {
+            return 0;
+        }
+
         Node *target = sentinel->previous;
 
         sentinel->previous = target->previous;
@@ -457,11 +477,22 @@ public:
 
         --size;
 
+        if constexpr (Finalizable<Type>)
+        {
+            target->data.finalize();
+        }
         Memory::deallocate(allocatorInfo, target);
+
+        return 1;
     }
 
-    Void drop_front() noexcept
+    USize remove_front() noexcept
     {
+        if (size == 0)
+        {
+            return 0;
+        }
+
         Node *target = sentinel->next;
 
         sentinel->next = target->next;
@@ -469,12 +500,21 @@ public:
 
         --size;
 
+        if constexpr (Finalizable<Type>)
+        {
+            target->data.finalize();
+        }
         Memory::deallocate(allocatorInfo, target);
+
+        return 1;
     }
 
-    Void drop(const USize frontIndex) noexcept
+    USize remove(const USize frontIndex) noexcept
     {
-        assert(frontIndex < size && "Index should fit in list range!");
+        if (frontIndex >= size)
+        {
+            return 0;
+        }
         USize currentIndex = 0;
         for (Iterator current = begin(); current != end(); ++current)
         {
@@ -488,51 +528,37 @@ public:
 
             --size;
 
+            if constexpr (Finalizable<Type>)
+            {
+                current.get_node()->data.finalize();
+            }
             Memory::deallocate(allocatorInfo, current.get_node());
             break;
         }
+
+        return  1;
     }
 
-    Void drop(const Iterator &toDrop) noexcept
+    USize remove(const Iterator &toDrop) noexcept
     {
+        if (size == 0)
+        {
+            return 0;
+        }
         toDrop.get_node()->previous->next = toDrop.get_node()->next;
         toDrop.get_node()->next->previous = toDrop.get_node()->previous;
 
         --size;
 
+        if constexpr (Finalizable<Type>)
+        {
+            toDrop.get_node()->data.finalize();
+        }
         Memory::deallocate(allocatorInfo, toDrop.get_node());
+
+        return 1;
     }
 
-
-    Iterator begin() noexcept
-    {
-        return Iterator{ sentinel->next };
-    }
-
-    Iterator end() noexcept
-    {
-        return Iterator{ sentinel };
-    }
-
-    Type &front() noexcept
-    {
-        return sentinel->next->data;
-    }
-
-    Type &back() noexcept
-    {
-        return sentinel->previous->data;
-    }
-
-    const Type &front() const noexcept
-    {
-        return sentinel->next->data;
-    }
-
-    const Type &back() const noexcept
-    {
-        return sentinel->previous->data;
-    }
 
     Void move(List &source) noexcept
     {
@@ -563,6 +589,7 @@ public:
             push_front(element);
         }
     }
+
 
     [[nodiscard]]
     Bool contains(const Type &value) const noexcept
@@ -613,6 +640,18 @@ public:
     }
 
     [[nodiscard]]
+    Iterator begin() noexcept
+    {
+        return Iterator{ sentinel->next };
+    }
+
+    [[nodiscard]]
+    Iterator end() noexcept
+    {
+        return Iterator{ sentinel };
+    }
+
+    [[nodiscard]]
     Iterator begin() const noexcept
     {
         return Iterator{ sentinel->next };
@@ -624,25 +663,47 @@ public:
         return Iterator{ sentinel };
     }
 
+    [[nodiscard]]
+    Type &front() noexcept
+    {
+        assert(size > 0 && "List is empty!");
+        return sentinel->next->data;
+    }
+
+    [[nodiscard]]
+    Type &back() noexcept
+    {
+        assert(size > 0 && "List is empty!");
+        return sentinel->previous->data;
+    }
+
+    [[nodiscard]]
+    const Type &front() const noexcept
+    {
+        assert(size > 0 && "List is empty!");
+        return sentinel->next->data;
+    }
+
+    [[nodiscard]]
+    const Type &back() const noexcept
+    {
+        assert(size > 0 && "List is empty!");
+        return sentinel->previous->data;
+    }
+
     Void clear() noexcept
     {
-        if constexpr (Finalizable<Type>)
+        for (Iterator iterator = begin(); iterator != end();)
         {
-            for (Iterator iterator = begin(); iterator != end();)
+            if constexpr (Finalizable<Type>)
             {
                 iterator->finalize();
-                Node *toRemove = iterator.get_node();
-                ++iterator;
-                Memory::deallocate(allocatorInfo, toRemove);
             }
-        } else {
-            for (Iterator iterator = begin(); iterator != end();)
-            {
-                Node *toRemove = iterator.get_node();
-                ++iterator;
-                Memory::deallocate(allocatorInfo, toRemove);
-            }
+            Node *toRemove = iterator.get_node();
+            ++iterator;
+            Memory::deallocate(allocatorInfo, toRemove);
         }
+
         sentinel->previous = sentinel;
         sentinel->next     = sentinel;
         size = 0;
@@ -650,7 +711,7 @@ public:
 
     Void finalize() noexcept
     {
-        assert(allocatorInfo);
+        assert(allocatorInfo && "Allocator is nullptr!");
         if (!sentinel)
         {
             *this = {};

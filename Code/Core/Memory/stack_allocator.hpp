@@ -51,6 +51,9 @@ public:
 
     Void move(StackAllocator &source) noexcept;
 
+    [[nodiscard]]
+    USize get_capacity() const noexcept;
+
     Void finalize() noexcept;
 
     AllocatorInfo *get_allocator_info() noexcept;

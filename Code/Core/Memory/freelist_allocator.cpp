@@ -28,7 +28,6 @@ Void FreeListAllocator::initialize(const USize bytes) noexcept
     RBNodePacked *root = Memory::start_object<RBNodePacked>(memory);
     root->set_size(capacity - sizeof(RBNodePacked));
     freeBlocks.insert(root);
-    print_list();
 }
 
 Void FreeListAllocator::initialize(const USize bytes, AllocatorInfo *allocatorInfo) noexcept
@@ -53,7 +52,6 @@ Void FreeListAllocator::initialize(const USize bytes, AllocatorInfo *allocatorIn
     RBNodePacked *root = Memory::start_object<RBNodePacked>(memory);
     root->set_size(capacity - sizeof(RBNodePacked));
     freeBlocks.insert(root);
-    print_list();
 }
 
 Byte* FreeListAllocator::allocate(USize bytes, USize alignment) noexcept
@@ -112,6 +110,11 @@ Void FreeListAllocator::print_list() noexcept
         node = node->get_next();
     }
     printf("\n");
+}
+
+USize FreeListAllocator::get_capacity() const noexcept
+{
+    return capacity;
 }
 
 Void FreeListAllocator::finalize() noexcept

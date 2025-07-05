@@ -22,6 +22,9 @@ public:
     {
         assert(allocator && "Allocator is nullptr!");
         allocatorInfo = allocator;
+        elements = nullptr;
+        capacity = 0;
+        size = 0;
     }
 
     Void initialize(const USize initialCapacity, 
@@ -85,6 +88,14 @@ public:
 
         if (elements)
         {
+            if constexpr (Finalizable<Type>)
+            {
+                const Type *dataEnd = elements + size;
+                for (Type *data = elements; data < dataEnd; ++data)
+                {
+                    data->finalize();
+                }
+            }
             Memory::deallocate(allocatorInfo, elements);
         }
         elements = newElements;
@@ -126,6 +137,14 @@ public:
 
             if (elements)
             {
+                if constexpr (Finalizable<Type>)
+                {
+                    const Type *dataEnd = elements + size;
+                    for (Type *data = elements; data < dataEnd; ++data)
+                    {
+                        data->finalize();
+                    }
+                }
                 Memory::deallocate(allocatorInfo, elements);
             }
             const USize oldSize = size;
@@ -392,9 +411,8 @@ public:
     {
         if constexpr (Finalizable<Type>)
         {
-            Type *data = elements;
             const Type *dataEnd = elements + size;
-            for (; data < dataEnd; ++data)
+            for (Type *data = elements; data < dataEnd; ++data)
             {
                 data->finalize();
             }
@@ -405,6 +423,7 @@ public:
 
     Void finalize() noexcept
     {
+        assert(allocatorInfo && "Allocator is nullptr!");
         if (!elements)
         {
             *this = {};
@@ -413,10 +432,8 @@ public:
 
         clear();
 
-        if (allocatorInfo)
-        {
-            Memory::deallocate(allocatorInfo, elements);
-        }
+        Memory::deallocate(allocatorInfo, elements);
+
         *this = {};
     }
 };

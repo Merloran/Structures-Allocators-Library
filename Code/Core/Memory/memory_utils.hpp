@@ -24,6 +24,11 @@ struct AllocatorInfo
 
 namespace Memory
 {
+    constexpr USize align_binary(const USize value) noexcept
+    {
+        return USize(1) << std::bit_width(value - USize(1));
+    }
+
     constexpr USize align_binary_safe(const USize value) noexcept
     {
         if (value <= USize(8))

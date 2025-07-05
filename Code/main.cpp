@@ -1,503 +1,598 @@
 ﻿#include <iostream>
-#include <list>
-#include <vector>
 #include <chrono>
+#include <unordered_map>
+#include <vector>
 #include <random>
-#include <algorithm>
+#include <string>
 #include <iomanip>
 
+#include "Memory/freelist_allocator.hpp"
 #include "Memory/pool_allocator.hpp"
-#include "Structures/list.hpp"
+#include "Memory/stack_allocator.hpp"
+#include "Structures/hash_map.hpp"
+#include "Structures/string.hpp"
 
-// Różne rozmiary testów
-constexpr size_t SMALL_SIZE = 1000;
-constexpr size_t MEDIUM_SIZE = 10000;
-constexpr size_t LARGE_SIZE = 100000;
-constexpr size_t XLARGE_SIZE = 1000000;
+// Klasa do mierzenia czasu
+class Timer {
+private:
+    std::chrono::high_resolution_clock::time_point start_time;
 
-// Klasa do bardziej złożonych testów
-struct TestObject {
-    int value;
-    double data[4]; // Symuluje większy obiekt
-
-    TestObject() noexcept : value(0) {
-        std::fill(std::begin(data), std::end(data), 0.0);
+public:
+    void start() {
+        start_time = std::chrono::high_resolution_clock::now();
     }
 
-    TestObject(int v) noexcept : value(v) {
-        for (int i = 0; i < 4; ++i) {
-            data[i] = v * (i + 1) * 0.1;
-        }
-    }
-
-    bool operator==(const TestObject &other) const {
-        return value == other.value;
+    double elapsed_ms() const {
+        auto end_time = std::chrono::high_resolution_clock::now();
+        return std::chrono::duration<double, std::milli>(end_time - start_time).count();
     }
 };
 
-// Ulepszona funkcja benchmarkowa z większą precyzją
-struct BenchmarkResult {
-    double avg_time;
-    double min_time;
-    double max_time;
-    double stddev;
+// Klasa do testów wydajnościowych
+class HashMapBenchmark {
+private:
+    static constexpr size_t BENCHMARK_ITERATIONS = 10;
+
+    std::mt19937 rng;
+    std::uniform_int_distribution<int> int_dist;
+    std::uniform_int_distribution<size_t> string_length_dist;
+
+    std::vector<int> test_keys_int;
+    std::vector<std::string> test_keys_string;
+    std::vector<String> test_keys_custom_string;
+    std::vector<int> test_values;
+
+    // Alokatory specjalne dla różnych testów
+    FreeListAllocator string_allocator;
+    PoolAllocator int_node_allocator;
+    PoolAllocator string_node_allocator;
+    StackAllocator bucket_allocator;
+
+public:
+    HashMapBenchmark() : rng(42), int_dist(0, 1000000), string_length_dist(5, 20) {}
+
+    void initialize_allocators(size_t max_elements) {
+        // Alokator dla stringów
+        string_allocator.initialize(max_elements * 50); // Szacowana średnia długość stringa * max elementów
+
+        // Alokator dla node'ów int->int (rozmiar bloku = rozmiar Node)
+        int_node_allocator.initialize(max_elements * sizeof(HashMap<int, int>::Node), sizeof(HashMap<int, int>::Node));
+
+        // Alokator dla node'ów String->int (rozmiar bloku = rozmiar Node)
+        string_node_allocator.initialize(max_elements * sizeof(HashMap<String, int>::Node), sizeof(HashMap<String, int>::Node));
+
+        // Alokator dla bucketów
+        bucket_allocator.initialize(max_elements * sizeof(void *) * 4); // Zapas na rehashing
+    }
+
+    void finalize_allocators() {
+        string_allocator.finalize();
+        int_node_allocator.finalize();
+        string_node_allocator.finalize();
+        bucket_allocator.finalize();
+    }
+
+    void generate_test_data(size_t count) {
+        test_keys_int.clear();
+        test_keys_string.clear();
+        test_keys_custom_string.clear();
+        test_values.clear();
+
+        test_keys_int.reserve(count);
+        test_keys_string.reserve(count);
+        test_keys_custom_string.reserve(count);
+        test_values.reserve(count);
+
+        for (size_t i = 0; i < count; ++i) {
+            test_keys_int.push_back(int_dist(rng));
+            test_values.push_back(int_dist(rng));
+
+            // Generowanie losowego std::string
+            size_t length = string_length_dist(rng);
+            std::string str;
+            str.reserve(length);
+            for (size_t j = 0; j < length; ++j) {
+                str += static_cast<char>('a' + (rng() % 26));
+            }
+            test_keys_string.push_back(str);
+
+            // Generowanie losowego własnego String
+            String custom_str;
+            custom_str.initialize(str.c_str(), string_allocator.get_allocator_info());
+            test_keys_custom_string.push_back(std::move(custom_str));
+        }
+    }
+
+    void cleanup_custom_strings() {
+        for (auto &str : test_keys_custom_string) {
+            str.finalize();
+        }
+        test_keys_custom_string.clear();
+    }
+
+    // Benchmarki dla std::unordered_map
+    template<typename MapType>
+    double benchmark_insertion(MapType &map, const std::vector<typename MapType::key_type> &keys) {
+        Timer timer;
+        timer.start();
+
+        for (size_t i = 0; i < keys.size(); ++i) {
+            map[keys[i]] = test_values[i];
+        }
+
+        return timer.elapsed_ms();
+    }
+
+    template<typename MapType>
+    double benchmark_lookup(const MapType &map, const std::vector<typename MapType::key_type> &keys) {
+        Timer timer;
+        timer.start();
+
+        volatile int sink = 0;
+        for (const auto &key : keys) {
+            auto it = map.find(key);
+            if (it != map.end()) {
+                sink += it->second;
+            }
+        }
+
+        return timer.elapsed_ms();
+    }
+
+    template<typename MapType>
+    double benchmark_deletion(MapType &map, const std::vector<typename MapType::key_type> &keys) {
+        Timer timer;
+        timer.start();
+
+        for (const auto &key : keys) {
+            map.erase(key);
+        }
+
+        return timer.elapsed_ms();
+    }
+
+    // Benchmarki dla własnej HashMap<int, int>
+    double benchmark_insertion_custom_int(HashMap<int, int> &map, const std::vector<int> &keys) {
+        Timer timer;
+        timer.start();
+
+        for (size_t i = 0; i < keys.size(); ++i) {
+            map[keys[i]] = test_values[i];
+        }
+
+        return timer.elapsed_ms();
+    }
+
+    double benchmark_lookup_custom_int(const HashMap<int, int> &map, const std::vector<int> &keys) {
+        Timer timer;
+        timer.start();
+
+        volatile int sink = 0;
+        for (const auto &key : keys) {
+            auto it = map.find(key);
+            if (it != map.end()) {
+                sink += *it;
+            }
+        }
+
+        return timer.elapsed_ms();
+    }
+
+    double benchmark_deletion_custom_int(HashMap<int, int> &map, const std::vector<int> &keys) {
+        Timer timer;
+        timer.start();
+
+        for (const auto &key : keys) {
+            map.remove(key);
+        }
+
+        return timer.elapsed_ms();
+    }
+
+    // Benchmarki dla własnej HashMap<String, int>
+    double benchmark_insertion_custom_string(HashMap<String, int> &map, const std::vector<String> &keys) {
+        Timer timer;
+        timer.start();
+
+        for (size_t i = 0; i < keys.size(); ++i) {
+            map[keys[i]] = test_values[i];
+        }
+
+        return timer.elapsed_ms();
+    }
+
+    double benchmark_lookup_custom_string(const HashMap<String, int> &map, const std::vector<String> &keys) {
+        Timer timer;
+        timer.start();
+
+        volatile int sink = 0;
+        for (const auto &key : keys) {
+            auto it = map.find(key);
+            if (it != map.end()) {
+                sink += *it;
+            }
+        }
+
+        return timer.elapsed_ms();
+    }
+
+    double benchmark_deletion_custom_string(HashMap<String, int> &map, const std::vector<String> &keys) {
+        Timer timer;
+        timer.start();
+
+        for (const auto &key : keys) {
+            map.remove(key);
+        }
+
+        return timer.elapsed_ms();
+    }
+
+    void run_int_benchmark(size_t data_size) {
+        std::cout << "\n=== Benchmark dla int -> int (rozmiar: " << data_size << ") ===\n";
+
+        generate_test_data(data_size);
+
+        double custom_insert_time = 0;
+        double custom_lookup_time = 0;
+        double custom_delete_time = 0;
+
+        double std_insert_time = 0;
+        double std_lookup_time = 0;
+        double std_delete_time = 0;
+
+        for (size_t iter = 0; iter < BENCHMARK_ITERATIONS; ++iter) {
+            // Test własnej HashMap z dedykowanymi alokatorami
+            HashMap<int, int> custom_map;
+            custom_map.initialize(data_size,
+                                  int_node_allocator.get_allocator_info(),
+                                  bucket_allocator.get_allocator_info());
+
+            custom_insert_time += benchmark_insertion_custom_int(custom_map, test_keys_int);
+            custom_lookup_time += benchmark_lookup_custom_int(custom_map, test_keys_int);
+            custom_delete_time += benchmark_deletion_custom_int(custom_map, test_keys_int);
+
+            custom_map.finalize();
+
+            // Test std::unordered_map
+            std::unordered_map<int, int> std_map;
+            std_map.reserve(data_size);
+
+            std_insert_time += benchmark_insertion(std_map, test_keys_int);
+            std_lookup_time += benchmark_lookup(std_map, test_keys_int);
+            std_delete_time += benchmark_deletion(std_map, test_keys_int);
+        }
+
+        // Średnie czasy
+        custom_insert_time /= BENCHMARK_ITERATIONS;
+        custom_lookup_time /= BENCHMARK_ITERATIONS;
+        custom_delete_time /= BENCHMARK_ITERATIONS;
+
+        std_insert_time /= BENCHMARK_ITERATIONS;
+        std_lookup_time /= BENCHMARK_ITERATIONS;
+        std_delete_time /= BENCHMARK_ITERATIONS;
+
+        // Wyświetlenie wyników
+        std::cout << std::fixed << std::setprecision(2);
+        std::cout << "Operacja       | Własna HashMap | std::unordered_map | Przyspieszenie\n";
+        std::cout << "---------------|----------------|--------------------|--------------\n";
+        std::cout << "Wstawianie     | " << std::setw(10) << custom_insert_time << " ms | "
+            << std::setw(14) << std_insert_time << " ms | "
+            << std::setw(10) << (custom_insert_time > 0 ? std_insert_time / custom_insert_time : 0.0) << "x\n";
+        std::cout << "Wyszukiwanie   | " << std::setw(10) << custom_lookup_time << " ms | "
+            << std::setw(14) << std_lookup_time << " ms | "
+            << std::setw(10) << (custom_lookup_time > 0 ? std_lookup_time / custom_lookup_time : 0.0) << "x\n";
+        std::cout << "Usuwanie       | " << std::setw(10) << custom_delete_time << " ms | "
+            << std::setw(14) << std_delete_time << " ms | "
+            << std::setw(10) << (custom_delete_time > 0 ? std_delete_time / custom_delete_time : 0.0) << "x\n";
+
+        double total_custom = custom_insert_time + custom_lookup_time + custom_delete_time;
+        double total_std = std_insert_time + std_lookup_time + std_delete_time;
+
+        std::cout << "CAŁKOWITY CZAS | " << std::setw(10) << total_custom << " ms | "
+            << std::setw(14) << total_std << " ms | "
+            << std::setw(10) << (total_custom > 0 ? total_std / total_custom : 0.0) << "x\n";
+
+        std::cout << "Alokatory:\n";
+        std::cout << "  Node allocator (Pool): blok " << sizeof(HashMap<int, int>::Node) << " bajtów\n";
+        std::cout << "  Bucket allocator (Stack): " << bucket_allocator.get_capacity() << " bajtów\n";
+    }
+
+    void run_string_benchmark(size_t data_size) {
+        std::cout << "\n=== Benchmark dla String -> int (rozmiar: " << data_size << ") ===\n";
+
+        generate_test_data(data_size);
+
+        double custom_insert_time = 0;
+        double custom_lookup_time = 0;
+        double custom_delete_time = 0;
+
+        double std_insert_time = 0;
+        double std_lookup_time = 0;
+        double std_delete_time = 0;
+
+        for (size_t iter = 0; iter < BENCHMARK_ITERATIONS; ++iter) {
+            // Test własnej HashMap<String, int>
+            HashMap<String, int> custom_map;
+            custom_map.initialize(data_size,
+                                  string_node_allocator.get_allocator_info(),
+                                  bucket_allocator.get_allocator_info());
+
+            custom_insert_time += benchmark_insertion_custom_string(custom_map, test_keys_custom_string);
+            custom_lookup_time += benchmark_lookup_custom_string(custom_map, test_keys_custom_string);
+            custom_delete_time += benchmark_deletion_custom_string(custom_map, test_keys_custom_string);
+
+            custom_map.finalize();
+
+            // Test std::unordered_map<std::string, int>
+            std::unordered_map<std::string, int> std_map;
+            std_map.reserve(data_size);
+
+            std_insert_time += benchmark_insertion(std_map, test_keys_string);
+            std_lookup_time += benchmark_lookup(std_map, test_keys_string);
+            std_delete_time += benchmark_deletion(std_map, test_keys_string);
+        }
+
+        // Średnie czasy
+        custom_insert_time /= BENCHMARK_ITERATIONS;
+        custom_lookup_time /= BENCHMARK_ITERATIONS;
+        custom_delete_time /= BENCHMARK_ITERATIONS;
+
+        std_insert_time /= BENCHMARK_ITERATIONS;
+        std_lookup_time /= BENCHMARK_ITERATIONS;
+        std_delete_time /= BENCHMARK_ITERATIONS;
+
+        // Wyświetlenie wyników
+        std::cout << std::fixed << std::setprecision(2);
+        std::cout << "Operacja       | Własna HashMap | std::unordered_map | Przyspieszenie\n";
+        std::cout << "---------------|----------------|--------------------|--------------\n";
+        std::cout << "Wstawianie     | " << std::setw(10) << custom_insert_time << " ms | "
+            << std::setw(14) << std_insert_time << " ms | "
+            << std::setw(10) << (custom_insert_time > 0 ? std_insert_time / custom_insert_time : 0.0) << "x\n";
+        std::cout << "Wyszukiwanie   | " << std::setw(10) << custom_lookup_time << " ms | "
+            << std::setw(14) << std_lookup_time << " ms | "
+            << std::setw(10) << (custom_lookup_time > 0 ? std_lookup_time / custom_lookup_time : 0.0) << "x\n";
+        std::cout << "Usuwanie       | " << std::setw(10) << custom_delete_time << " ms | "
+            << std::setw(14) << std_delete_time << " ms | "
+            << std::setw(10) << (custom_delete_time > 0 ? std_delete_time / custom_delete_time : 0.0) << "x\n";
+
+        double total_custom = custom_insert_time + custom_lookup_time + custom_delete_time;
+        double total_std = std_insert_time + std_lookup_time + std_delete_time;
+
+        std::cout << "CAŁKOWITY CZAS | " << std::setw(10) << total_custom << " ms | "
+            << std::setw(14) << total_std << " ms | "
+            << std::setw(10) << (total_custom > 0 ? total_std / total_custom : 0.0) << "x\n";
+
+        std::cout << "Alokatory:\n";
+        std::cout << "  String allocator (FreeList): " << string_allocator.get_capacity() << " bajtów\n";
+        std::cout << "  Node allocator (Pool): blok " << sizeof(HashMap<String, int>::Node) << " bajtów\n";
+        std::cout << "  Bucket allocator (Stack): " << bucket_allocator.get_capacity() << " bajtów\n";
+
+        cleanup_custom_strings();
+    }
+
+    void run_memory_usage_test(size_t data_size) {
+        std::cout << "\n=== Test zużycia pamięci (rozmiar: " << data_size << ") ===\n";
+
+        generate_test_data(data_size);
+
+        std::cout << "Rozmiary struktur:\n";
+        std::cout << "  HashMap<int, int>::Node: " << sizeof(HashMap<int, int>::Node) << " bajtów\n";
+        std::cout << "  HashMap<String, int>::Node: " << sizeof(HashMap<String, int>::Node) << " bajtów\n";
+        std::cout << "  std::pair<const int, int>: " << sizeof(std::pair<const int, int>) << " bajtów\n";
+        std::cout << "  std::pair<const std::string, int>: " << sizeof(std::pair<const std::string, int>) << " bajtów\n";
+
+        // Test HashMap<int, int>
+        HashMap<int, int> custom_int_map;
+        custom_int_map.initialize(data_size,
+                                  int_node_allocator.get_allocator_info(),
+                                  bucket_allocator.get_allocator_info());
+
+        for (size_t i = 0; i < data_size && i < test_keys_int.size(); ++i) {
+            custom_int_map[test_keys_int[i]] = test_values[i];
+        }
+
+        std::cout << "\nHashMap<int, int>:\n";
+        std::cout << "  Rozmiar: " << custom_int_map.get_size() << " elementów\n";
+        std::cout << "  Pojemność: " << custom_int_map.get_capacity() << " buckets\n";
+        std::cout << "  Load factor: " << custom_int_map.get_load_factor() << "\n";
+
+        // Test HashMap<String, int>
+        HashMap<String, int> custom_string_map;
+        custom_string_map.initialize(data_size,
+                                     string_node_allocator.get_allocator_info(),
+                                     bucket_allocator.get_allocator_info());
+
+        for (size_t i = 0; i < data_size && i < test_keys_custom_string.size(); ++i) {
+            custom_string_map[test_keys_custom_string[i]] = test_values[i];
+        }
+
+        std::cout << "\nHashMap<String, int>:\n";
+        std::cout << "  Rozmiar: " << custom_string_map.get_size() << " elementów\n";
+        std::cout << "  Pojemność: " << custom_string_map.get_capacity() << " buckets\n";
+        std::cout << "  Load factor: " << custom_string_map.get_load_factor() << "\n";
+
+        // Test std::unordered_map
+        std::unordered_map<int, int> std_int_map;
+        std::unordered_map<std::string, int> std_string_map;
+
+        for (size_t i = 0; i < data_size && i < test_keys_int.size(); ++i) {
+            std_int_map[test_keys_int[i]] = test_values[i];
+            std_string_map[test_keys_string[i]] = test_values[i];
+        }
+
+        std::cout << "\nstd::unordered_map<int, int>:\n";
+        std::cout << "  Rozmiar: " << std_int_map.size() << " elementów\n";
+        std::cout << "  Bucket count: " << std_int_map.bucket_count() << "\n";
+        std::cout << "  Load factor: " << std_int_map.load_factor() << "\n";
+
+        std::cout << "\nstd::unordered_map<std::string, int>:\n";
+        std::cout << "  Rozmiar: " << std_string_map.size() << " elementów\n";
+        std::cout << "  Bucket count: " << std_string_map.bucket_count() << "\n";
+        std::cout << "  Load factor: " << std_string_map.load_factor() << "\n";
+
+        custom_int_map.finalize();
+        custom_string_map.finalize();
+        cleanup_custom_strings();
+    }
+
+    void run_collision_test() {
+        std::cout << "\n=== Test kolizji hash'y ===\n";
+
+        // Generowanie kluczy, które mogą powodować kolizje
+        std::vector<int> collision_keys;
+        for (int i = 0; i < 1000; ++i) {
+            collision_keys.push_back(i * 32); // Klucze o regularnym odstępie
+        }
+
+        // Reset alokatorów dla małego testu
+        PoolAllocator small_node_allocator;
+        StackAllocator small_bucket_allocator;
+        small_node_allocator.initialize(1000 * sizeof(HashMap<int, int>::Node), sizeof(HashMap<int, int>::Node));
+        small_bucket_allocator.initialize(4000 * sizeof(void *));
+
+        HashMap<int, int> custom_map;
+        custom_map.initialize(32,
+                              small_node_allocator.get_allocator_info(),
+                              small_bucket_allocator.get_allocator_info());
+
+        Timer timer;
+        timer.start();
+
+        for (size_t i = 0; i < collision_keys.size(); ++i) {
+            custom_map[collision_keys[i]] = static_cast<int>(i);
+        }
+
+        double custom_time = timer.elapsed_ms();
+
+        std::unordered_map<int, int> std_map;
+        std_map.reserve(32);
+
+        timer.start();
+
+        for (size_t i = 0; i < collision_keys.size(); ++i) {
+            std_map[collision_keys[i]] = static_cast<int>(i);
+        }
+
+        double std_time = timer.elapsed_ms();
+
+        std::cout << "Test z potencjalnymi kolizjami (1000 elementów, początkowa pojemność 32):\n";
+        std::cout << "Własna HashMap:     " << std::fixed << std::setprecision(2) << custom_time << " ms\n";
+        std::cout << "std::unordered_map: " << std_time << " ms\n";
+        std::cout << "Przyspieszenie:     " << (custom_time > 0 ? std_time / custom_time : 0.0) << "x\n";
+
+        std::cout << "\nStatystyki po teście:\n";
+        std::cout << "Własna HashMap - rozmiar: " << custom_map.get_size()
+            << ", pojemność: " << custom_map.get_capacity()
+            << ", load factor: " << custom_map.get_load_factor() << "\n";
+        std::cout << "std::unordered_map - rozmiar: " << std_map.size()
+            << ", bucket count: " << std_map.bucket_count()
+            << ", load factor: " << std_map.load_factor() << "\n";
+
+        custom_map.finalize();
+        small_node_allocator.finalize();
+        small_bucket_allocator.finalize();
+    }
+
+    void run_allocator_efficiency_test(size_t data_size) {
+        std::cout << "\n=== Test efektywności alokatorów (rozmiar: " << data_size << ") ===\n";
+
+        generate_test_data(data_size);
+
+        // Test z różnymi konfiguracjami alokatorów
+        std::cout << "Konfiguracje alokatorów:\n";
+        std::cout << "1. Pool (node) + Stack (bucket) - zoptymalizowane\n";
+        std::cout << "2. FreeList (node) + FreeList (bucket) - ogólne\n";
+
+        // Konfiguracja 1: Pool + Stack (zoptymalizowana)
+        PoolAllocator opt_node_allocator;
+        StackAllocator opt_bucket_allocator;
+        opt_node_allocator.initialize(data_size * sizeof(HashMap<int, int>::Node), sizeof(HashMap<int, int>::Node));
+        opt_bucket_allocator.initialize(data_size * sizeof(void *) * 4);
+
+        HashMap<int, int> opt_map;
+        opt_map.initialize(data_size,
+                           opt_node_allocator.get_allocator_info(),
+                           opt_bucket_allocator.get_allocator_info());
+
+        Timer timer;
+        timer.start();
+        for (size_t i = 0; i < data_size && i < test_keys_int.size(); ++i) {
+            opt_map[test_keys_int[i]] = test_values[i];
+        }
+        double opt_time = timer.elapsed_ms();
+
+        // Konfiguracja 2: FreeList + FreeList (ogólna)
+        FreeListAllocator gen_node_allocator;
+        FreeListAllocator gen_bucket_allocator;
+        gen_node_allocator.initialize(data_size * sizeof(HashMap<int, int>::Node) * 8);
+        gen_bucket_allocator.initialize(data_size * sizeof(void *) * 8);
+
+        HashMap<int, int> gen_map;
+        gen_map.initialize(data_size,
+                           gen_node_allocator.get_allocator_info(),
+                           gen_bucket_allocator.get_allocator_info());
+
+        timer.start();
+        for (size_t i = 0; i < data_size && i < test_keys_int.size(); ++i) {
+            gen_map[test_keys_int[i]] = test_values[i];
+        }
+        double gen_time = timer.elapsed_ms();
+
+        std::cout << std::fixed << std::setprecision(2);
+        std::cout << "Wyniki wstawiania " << data_size << " elementów:\n";
+        std::cout << "Pool + Stack:     " << opt_time << " ms\n";
+        std::cout << "FreeList + FreeList: " << gen_time << " ms\n";
+        std::cout << "Przyspieszenie:   " << (opt_time > 0 ? gen_time / opt_time : 0.0) << "x\n";
+
+        opt_map.finalize();
+        gen_map.finalize();
+
+        opt_node_allocator.finalize();
+        opt_bucket_allocator.finalize();
+        gen_node_allocator.finalize();
+        gen_bucket_allocator.finalize();
+    }
 };
-
-template<typename Func>
-BenchmarkResult benchmark_advanced(Func &&func, size_t repeat = 20) {
-    using namespace std::chrono;
-    std::vector<double> times;
-    times.reserve(repeat);
-
-    // Warm-up
-    for (int i = 0; i < 3; ++i) {
-        func();
-    }
-
-    for (size_t i = 0; i < repeat; ++i) {
-        auto start = high_resolution_clock::now();
-        func();
-        auto end = high_resolution_clock::now();
-        times.push_back(duration<double>(end - start).count());
-    }
-
-    double sum = 0.0;
-    double min_t = times[0];
-    double max_t = times[0];
-
-    for (double t : times) {
-        sum += t;
-        min_t = std::min(min_t, t);
-        max_t = std::max(max_t, t);
-    }
-
-    double avg = sum / repeat;
-    double variance = 0.0;
-    for (double t : times) {
-        variance += (t - avg) * (t - avg);
-    }
-    variance /= repeat;
-
-    return { avg, min_t, max_t, std::sqrt(variance) };
-}
-
-void print_comparison(const std::string &test_name,
-                      const BenchmarkResult &std_result,
-                      const BenchmarkResult &custom_result) {
-    std::cout << "\n=== " << test_name << " ===\n";
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "std::list   : " << std_result.avg_time << "s (±" << std_result.stddev << ")\n";
-    std::cout << "custom List : " << custom_result.avg_time << "s (±" << custom_result.stddev << ")\n";
-
-    double speedup = std_result.avg_time / custom_result.avg_time;
-    if (speedup > 1.0) {
-        std::cout << "Custom is " << speedup << "x FASTER\n";
-    } else {
-        std::cout << "Custom is " << (1.0 / speedup) << "x SLOWER\n";
-    }
-}
-
-// Test konstrukcji i destrukcji
-void test_construction_destruction(size_t size) {
-    std::cout << "\n--- KONSTRUKCJA/DESTRUKCJA (" << size << " elementów) ---\n";
-
-    auto std_result = benchmark_advanced([size] {
-        std::list<int> lst;
-        for (size_t i = 0; i < size; ++i) {
-            lst.push_back(static_cast<int>(i));
-        }
-        // Destrukcja automatyczna
-    });
-
-    PoolAllocator allocator;
-    allocator.initialize(size * sizeof(List<int>::Node), sizeof(List<int>::Node)); // Więcej miejsca na bezpieczeństwo
-    auto custom_result = benchmark_advanced([&, size] {
-        List<int> lst;
-        lst.initialize(allocator.get_allocator_info());
-        for (size_t i = 0; i < size; ++i) {
-            lst.push_back(static_cast<int>(i));
-        }
-        lst.finalize();
-    });
-
-    allocator.finalize();
-    print_comparison("Konstrukcja/Destrukcja", std_result, custom_result);
-}
-
-// Test wstawiania na początku
-void test_front_insertion(size_t size) {
-    std::cout << "\n--- WSTAWIANIE NA POCZĄTKU (" << size << " elementów) ---\n";
-
-    auto std_result = benchmark_advanced([size] {
-        std::list<int> lst;
-        for (size_t i = 0; i < size; ++i) {
-            lst.push_front(static_cast<int>(i));
-        }
-    });
-
-    PoolAllocator allocator;
-    allocator.initialize(size * sizeof(List<int>::Node), sizeof(List<int>::Node));
-    auto custom_result = benchmark_advanced([&, size] {
-        List<int> lst;
-        lst.initialize(allocator.get_allocator_info());
-        for (size_t i = 0; i < size; ++i) {
-            lst.push_front(static_cast<int>(i));
-        }
-        lst.finalize();
-    });
-    allocator.finalize();
-
-    print_comparison("Wstawianie na początku", std_result, custom_result);
-}
-
-// Test wstawiania w środku
-void test_middle_insertion(size_t size) {
-    std::cout << "\n--- WSTAWIANIE W ŚRODKU (" << size << " elementów) ---\n";
-
-    auto std_result = benchmark_advanced([size] {
-        std::list<int> lst;
-        // Najpierw budujemy bazową listę
-        for (size_t i = 0; i < size / 2; ++i) {
-            lst.push_back(static_cast<int>(i));
-        }
-
-        // Potem wstawiamy w środku
-        auto it = lst.begin();
-        std::advance(it, size / 4);
-        for (size_t i = 0; i < size / 2; ++i) {
-            it = lst.insert(it, static_cast<int>(i + 1000));
-            ++it; // Przesuwamy iterator żeby nie wstawiać w tym samym miejscu
-        }
-    });
-
-    PoolAllocator allocator;
-    allocator.initialize(size * sizeof(List<int>::Node), sizeof(List<int>::Node));
-    auto custom_result = benchmark_advanced([&, size] {
-        List<int> lst;
-        lst.initialize(allocator.get_allocator_info());
-
-        // Budujemy bazową listę
-        for (size_t i = 0; i < size / 2; ++i) {
-            lst.push_back(static_cast<int>(i));
-        }
-
-        auto it = lst.begin();
-        for (size_t i = 0; i < size / 4; ++i)
-        {
-            ++it;
-        }
-
-        for (size_t i = 0; i < size / 2; ++i) 
-        {
-            lst.push(static_cast<int>(i + 1000), it);
-            ++it;
-        }
-
-        lst.finalize();
-    });
-    allocator.finalize();
-
-    print_comparison("Wstawianie w środku", std_result, custom_result);
-}
-
-// Test usuwania z końca
-void test_back_removal(size_t size) {
-    std::cout << "\n--- USUWANIE Z KOŃCA (" << size << " elementów) ---\n";
-
-    auto std_result = benchmark_advanced([size] {
-        std::list<int> lst;
-        for (size_t i = 0; i < size; ++i) {
-            lst.push_back(static_cast<int>(i));
-        }
-        while (!lst.empty()) {
-            lst.pop_back();
-        }
-    });
-
-    PoolAllocator allocator;
-    allocator.initialize(size * sizeof(List<int>::Node), sizeof(List<int>::Node));
-    auto custom_result = benchmark_advanced([&, size] {
-        List<int> lst;
-        lst.initialize(allocator.get_allocator_info());
-        for (size_t i = 0; i < size; ++i) {
-            lst.push_back(static_cast<int>(i));
-        }
-        while (!lst.is_empty()) {
-            lst.drop_back();
-        }
-        lst.finalize();
-    });
-    allocator.finalize();
-
-    print_comparison("Usuwanie z końca", std_result, custom_result);
-}
-
-// Test iteracji forward i backward
-void test_bidirectional_iteration(size_t size) {
-    std::cout << "\n--- ITERACJA DWUKIERUNKOWA (" << size << " elementów) ---\n";
-
-    std::list<int> std_list;
-    for (size_t i = 0; i < size; ++i) {
-        std_list.push_back(static_cast<int>(i));
-    }
-
-    PoolAllocator allocator;
-    allocator.initialize(size * sizeof(List<int>::Node), sizeof(List<int>::Node));
-    List<int> custom_list;
-    custom_list.initialize(allocator.get_allocator_info());
-    for (size_t i = 0; i < size; ++i) {
-        custom_list.push_back(static_cast<int>(i));
-    }
-
-    auto std_result = benchmark_advanced([&std_list] {
-        volatile long long sum = 0;
-        // Forward
-        for (auto it = std_list.begin(); it != std_list.end(); ++it) {
-            sum += *it;
-        }
-        // Backward
-        for (auto it = std_list.rbegin(); it != std_list.rend(); ++it) {
-            sum += *it;
-        }
-    });
-
-    auto custom_result = benchmark_advanced([&custom_list] {
-        volatile long long sum = 0;
-        // Forward
-        for (auto it = custom_list.begin(); it != custom_list.end(); ++it) {
-            sum += *it;
-        }
-        // Backward (symulujemy reverse iterator)
-        auto it = custom_list.end();
-        while (it != custom_list.begin()) {
-            --it;
-            sum += *it;
-        }
-    });
-
-    print_comparison("Iteracja dwukierunkowa", std_result, custom_result);
-
-    custom_list.finalize();
-    allocator.finalize();
-}
-
-// Test dostępu losowego (słabość list)
-void test_random_access(size_t size) {
-    std::cout << "\n--- DOSTĘP LOSOWY (" << size << " elementów, 1000 dostępów) ---\n";
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<size_t> dis(0, size - 1);
-
-    std::vector<size_t> indices;
-    for (int i = 0; i < 1000; ++i) {
-        indices.push_back(dis(gen));
-    }
-
-    std::list<int> std_list;
-    for (size_t i = 0; i < size; ++i) {
-        std_list.push_back(static_cast<int>(i));
-    }
-
-    PoolAllocator allocator;
-    allocator.initialize(size * sizeof(List<int>::Node), sizeof(List<int>::Node));
-    List<int> custom_list;
-    custom_list.initialize(allocator.get_allocator_info());
-    for (size_t i = 0; i < size; ++i) {
-        custom_list.push_back(static_cast<int>(i));
-    }
-
-    auto std_result = benchmark_advanced([&std_list, &indices] {
-        volatile long long sum = 0;
-        for (size_t idx : indices) {
-            auto it = std_list.begin();
-            std::advance(it, idx);
-            sum += *it;
-        }
-    });
-
-    auto custom_result = benchmark_advanced([&custom_list, &indices] {
-        volatile long long sum = 0;
-        for (size_t idx : indices) {
-            sum += custom_list[idx]; // Twoja optymalizacja z połową drogi
-        }
-    });
-
-    print_comparison("Dostęp losowy", std_result, custom_result);
-
-    custom_list.finalize();
-    allocator.finalize();
-}
-
-// Test z większymi obiektami
-void test_large_objects(size_t size) {
-    std::cout << "\n--- DUŻE OBIEKTY (" << size << " elementów) ---\n";
-
-    auto std_result = benchmark_advanced([size] {
-        std::list<TestObject> lst;
-        for (size_t i = 0; i < size; ++i) {
-            lst.push_back(TestObject(static_cast<int>(i)));
-        }
-
-        volatile long long sum = 0;
-        for (const auto &obj : lst) {
-            sum += obj.value;
-        }
-    });
-
-    PoolAllocator allocator;
-    allocator.initialize(size * sizeof(List<TestObject>::Node), sizeof(List<TestObject>::Node)); // Większe obiekty
-    auto custom_result = benchmark_advanced([&, size] {
-        List<TestObject> lst;
-        lst.initialize(allocator.get_allocator_info());
-        for (size_t i = 0; i < size; ++i) {
-            lst.push_back(TestObject(static_cast<int>(i)));
-        }
-
-        volatile long long sum = 0;
-        for (auto it = lst.begin(); it != lst.end(); ++it) {
-            sum += it->value;
-        }
-
-        lst.finalize();
-    });
-    allocator.finalize();
-
-    print_comparison("Duże obiekty", std_result, custom_result);
-}
-
-// Test wyszukiwania
-void test_search_performance(size_t size) {
-    std::cout << "\n--- WYSZUKIWANIE (" << size << " elementów, 100 wyszukiwań) ---\n";
-
-    std::list<int> std_list;
-    for (size_t i = 0; i < size; ++i) {
-        std_list.push_back(static_cast<int>(i));
-    }
-
-    PoolAllocator allocator;
-    allocator.initialize(size * sizeof(List<int>::Node), sizeof(List<int>::Node));
-    List<int> custom_list;
-    custom_list.initialize(allocator.get_allocator_info());
-    for (size_t i = 0; i < size; ++i) {
-        custom_list.push_back(static_cast<int>(i));
-    }
-
-    std::vector<int> search_values;
-    for (int i = 0; i < 100; ++i) {
-        search_values.push_back(static_cast<int>(size - 1 - i)); // Szukamy od końca
-    }
-
-    auto std_result = benchmark_advanced([&std_list, &search_values] {
-        volatile int found_count = 0;
-        for (int val : search_values) {
-            auto it = std::find(std_list.begin(), std_list.end(), val);
-            if (it != std_list.end()) {
-                found_count++;
-            }
-        }
-    });
-
-    auto custom_result = benchmark_advanced([&custom_list, &search_values] {
-        volatile int found_count = 0;
-        for (int val : search_values) {
-            if (custom_list.contains(val)) {
-                found_count++;
-            }
-        }
-    });
-
-    print_comparison("Wyszukiwanie", std_result, custom_result);
-
-    custom_list.finalize();
-    allocator.finalize();
-}
-
-// Test fragmentacji pamięci
-void test_memory_fragmentation() {
-    std::cout << "\n--- TEST FRAGMENTACJI PAMIĘCI ---\n";
-
-    const size_t ops = 10000;
-
-    auto std_result = benchmark_advanced([ops] {
-        std::list<int> lst;
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, 2);
-
-        for (size_t i = 0; i < ops; ++i) {
-            int op = dis(gen);
-            if (op == 0 && lst.size() < 1000) {
-                lst.push_back(static_cast<int>(i));
-            } else if (op == 1 && lst.size() < 1000) {
-                lst.push_front(static_cast<int>(i));
-            } else if (!lst.empty()) {
-                if (lst.size() % 2 == 0) {
-                    lst.pop_back();
-                } else {
-                    lst.pop_front();
-                }
-            }
-        }
-    });
-
-    PoolAllocator allocator;
-    allocator.initialize(100000, sizeof(List<int>::Node));
-    auto custom_result = benchmark_advanced([&, ops] {
-        List<int> lst;
-        lst.initialize(allocator.get_allocator_info());
-
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, 2);
-
-        for (size_t i = 0; i < ops; ++i) {
-            int op = dis(gen);
-            if (op == 0 && lst.get_size() < 1000) {
-                lst.push_back(static_cast<int>(i));
-            } else if (op == 1 && lst.get_size() < 1000) {
-                lst.push_front(static_cast<int>(i));
-            } else if (!lst.is_empty()) {
-                if (lst.get_size() % 2 == 0) {
-                    lst.drop_back();
-                } else {
-                    lst.drop_front();
-                }
-            }
-        }
-
-        lst.finalize();
-    });
-    allocator.finalize();
-
-    print_comparison("Fragmentacja pamięci", std_result, custom_result);
-}
 
 int main() {
-    std::cout << "=== ZAAWANSOWANE PORÓWNANIE std::list vs custom List ===\n";
+    std::cout << "=== ZAAWANSOWANE TESTY WYDAJNOŚCIOWE HASHMAP ===\n";
+    std::cout << "Porównanie własnej implementacji HashMap z std::unordered_map\n";
+    std::cout << "z dedykowanymi alokatorami dla każdego typu\n";
 
-    // Testy z różnymi rozmiarami
-    test_construction_destruction(SMALL_SIZE);
-    test_construction_destruction(MEDIUM_SIZE);
-    test_construction_destruction(LARGE_SIZE);
+    HashMapBenchmark benchmark;
 
-    test_front_insertion(MEDIUM_SIZE);
-    test_middle_insertion(SMALL_SIZE); // Mniejszy rozmiar bo O(n²)
+    // Maksymalny rozmiar dla inicjalizacji alokatorów
+    const size_t max_test_size = 1000000;
+    benchmark.initialize_allocators(max_test_size);
 
-    test_back_removal(MEDIUM_SIZE);
-    test_bidirectional_iteration(LARGE_SIZE);
+    try {
+        // Testy dla różnych rozmiarów danych
+        std::vector<size_t> test_sizes = { 1000, 10000, 100000, 1000000 };
 
-    test_random_access(MEDIUM_SIZE);
-    test_large_objects(SMALL_SIZE);
-    test_search_performance(MEDIUM_SIZE);
+        for (size_t size : test_sizes) {
+            benchmark.run_int_benchmark(size);
+        }
 
-    test_memory_fragmentation();
+        // Test dla stringów
+        std::vector<size_t> string_test_sizes = { 1000, 10000, 100000 };
+        for (size_t size : string_test_sizes) {
+            benchmark.run_string_benchmark(size);
+        }
 
-    std::cout << "\n=== PODSUMOWANIE ===\n";
-    std::cout << "1. Pool allocator powinien być szybszy w alokacji/dealokacji\n";
-    std::cout << "2. Twoja implementacja ma optymalizację dostępu losowego\n";
-    std::cout << "3. Fragmentacja pamięci powinna być mniejsza\n";
-    std::cout << "4. Cache locality może być lepsza dzięki pool allocator\n";
+        // Test zużycia pamięci
+        benchmark.run_memory_usage_test(10000);
 
+        // Test kolizji
+        benchmark.run_collision_test();
+
+        // Test efektywności alokatorów
+        benchmark.run_allocator_efficiency_test(50000);
+
+        std::cout << "\n=== KONIEC TESTÓW ===\n";
+    } catch (const std::exception &e) {
+        std::cerr << "Błąd podczas testów: " << e.what() << std::endl;
+    }
+
+    benchmark.finalize_allocators();
     return 0;
 }

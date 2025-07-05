@@ -185,10 +185,7 @@ RBNodePacked* RBTree::find(const USize size) const noexcept
         }
     }
 
-    if (!bestFit)
-    {
-        SPDLOG_WARN("Failed to find enough size!");
-    }
+    assert(bestFit && "Failed to find enough size!");
 
     return bestFit;
 }

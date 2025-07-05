@@ -8,6 +8,7 @@ project(${targetName})
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+find_package(xxHash CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 
@@ -33,6 +34,7 @@ endforeach()
 
 target_link_libraries(${targetName} PRIVATE spdlog::spdlog)
 target_link_libraries(${targetName} PRIVATE magic_enum::magic_enum)
+target_link_libraries(${targetName} PRIVATE xxHash::xxhash)
 
 # Precompiled headers and force include for pch
 target_precompile_headers(${targetName} PRIVATE Code/Core/Utilities/pch.hpp)

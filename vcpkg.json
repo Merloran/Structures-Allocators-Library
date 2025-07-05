@@ -4,6 +4,7 @@
 	"dependencies": 
 	[
 		"spdlog",
-		"magic-enum"
+		"magic-enum",
+		"xxhash"
 	]
 }

@@ -114,6 +114,16 @@ Void PoolAllocator::move(PoolAllocator& source) noexcept
     source = {};
 }
 
+USize PoolAllocator::get_capacity() const noexcept
+{
+    return capacity;
+}
+
+USize PoolAllocator::get_block_size() const noexcept
+{
+    return blockSize;
+}
+
 Void PoolAllocator::finalize() noexcept
 {
     if (!memory)
