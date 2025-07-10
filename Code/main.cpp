@@ -9,6 +9,7 @@
 #include "Memory/freelist_allocator.hpp"
 #include "Memory/pool_allocator.hpp"
 #include "Memory/stack_allocator.hpp"
+#include "Structures/dynamic_array.hpp"
 #include "Structures/hash_map.hpp"
 #include "Structures/string.hpp"
 
@@ -39,7 +40,7 @@ private:
 
     std::vector<int> test_keys_int;
     std::vector<std::string> test_keys_string;
-    std::vector<String> test_keys_custom_string;
+    DynamicArray<String> test_keys_custom_string;
     std::vector<int> test_values;
 
     // Alokatory specjalne dla różnych testów
@@ -99,7 +100,7 @@ public:
             // Generowanie losowego własnego String
             String custom_str;
             custom_str.initialize(str.c_str(), string_allocator.get_allocator_info());
-            test_keys_custom_string.push_back(std::move(custom_str));
+            test_keys_custom_string.emplace_back(custom_str);
         }
     }
 
@@ -190,18 +191,18 @@ public:
     }
 
     // Benchmarki dla własnej HashMap<String, int>
-    double benchmark_insertion_custom_string(HashMap<String, int> &map, const std::vector<String> &keys) {
+    double benchmark_insertion_custom_string(HashMap<String, int> &map, const DynamicArray<String> &keys) {
         Timer timer;
         timer.start();
 
-        for (size_t i = 0; i < keys.size(); ++i) {
+        for (size_t i = 0; i < keys.get_size(); ++i) {
             map[keys[i]] = test_values[i];
         }
 
         return timer.elapsed_ms();
     }
 
-    double benchmark_lookup_custom_string(const HashMap<String, int> &map, const std::vector<String> &keys) {
+    double benchmark_lookup_custom_string(const HashMap<String, int> &map, const DynamicArray<String> &keys) {
         Timer timer;
         timer.start();
 
@@ -216,7 +217,7 @@ public:
         return timer.elapsed_ms();
     }
 
-    double benchmark_deletion_custom_string(HashMap<String, int> &map, const std::vector<String> &keys) {
+    double benchmark_deletion_custom_string(HashMap<String, int> &map, const DynamicArray<String> &keys) {
         Timer timer;
         timer.start();
 
@@ -402,7 +403,7 @@ public:
                                      string_node_allocator.get_allocator_info(),
                                      bucket_allocator.get_allocator_info());
 
-        for (size_t i = 0; i < data_size && i < test_keys_custom_string.size(); ++i) {
+        for (size_t i = 0; i < data_size && i < test_keys_custom_string.get_size(); ++i) {
             custom_string_map[test_keys_custom_string[i]] = test_values[i];
         }
 

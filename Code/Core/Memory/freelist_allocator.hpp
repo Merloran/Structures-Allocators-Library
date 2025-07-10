@@ -49,7 +49,7 @@ public:
 
     Void move(FreeListAllocator &source) noexcept;
 
-    Void print_list() noexcept;
+    Void print_list() const noexcept;
 
     [[nodiscard]]
     USize get_capacity() const noexcept;

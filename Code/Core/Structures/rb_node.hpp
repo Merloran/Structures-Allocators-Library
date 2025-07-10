@@ -20,7 +20,7 @@ private:
     Bool isNextSet;
 
 public:
-    RBNode()
+    RBNode() noexcept
         : parent(nullptr)
         , left(nullptr)
         , right(nullptr)

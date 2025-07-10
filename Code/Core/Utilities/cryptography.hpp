@@ -7,12 +7,13 @@ namespace Cryptography
     UInt64 hash(Type value)
     requires std::is_arithmetic_v<Type> || std::is_enum_v<Type> || std::is_pointer_v<Type>
     {
-        if constexpr (std::is_pointer_v<Type>)
-        {
-            return XXH3_64bits(value, sizeof(*value));
-        } else {
-            return XXH3_64bits(&value, sizeof(Type));
-        }
+        // if constexpr (std::is_pointer_v<Type>)
+        // {
+        //     return XXH3_64bits(value, sizeof(*value));
+        // } else {
+        //     return XXH3_64bits(&value, sizeof(Type));
+        // }
+        return USize(value);
     }
 
     template <typename Type>

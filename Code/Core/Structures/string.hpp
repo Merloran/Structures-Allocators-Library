@@ -435,7 +435,12 @@ public:
 
     Int8 compare(const BasicString &other) const noexcept
     {
-        return strcmp(begin(), other.begin());
+        if (get_size() != other.get_size())
+        {
+            return false;
+        }
+
+        return memcmp(begin(), other.begin(), size & ~SSO_FLAG);
     }
 
     Int8 compare(const Type        *other) const noexcept
@@ -451,7 +456,7 @@ public:
             return false;
         }
 
-        return strcmp(begin(), other.begin()) == 0;
+        return memcmp(begin(), other.begin(), size & ~SSO_FLAG) == 0;
     }
 
     Bool equals(const Type        *other) const noexcept
@@ -1011,22 +1016,22 @@ public:
     
     inline Bool operator< (const BasicString &other) const noexcept
     {
-        return compare(other) == -1I8;
+        return compare(other) < 0I8;
     }
     
     inline Bool operator<=(const BasicString &other) const noexcept
     {
-        return compare(other) != 1I8;
+        return compare(other) <= 0I8;
     }
     
     inline Bool operator> (const BasicString &other) const noexcept
     {
-        return compare(other) == 1I8;
+        return compare(other) > 0I8;
     }
     
     inline Bool operator>=(const BasicString &other) const noexcept
     {
-        return compare(other) != -1I8;
+        return compare(other) >= 0I8;
     }
 
 
@@ -1042,37 +1047,41 @@ public:
 
     inline Bool operator< (const Type *other) const noexcept
     {
-        return compare(other) == -1I8;
+        return compare(other) < 0I8;
     }
 
     inline Bool operator<=(const Type *other) const noexcept
     {
-        return compare(other) != 1I8;
+        return compare(other) <= 0I8;
     }
 
     inline Bool operator> (const Type *other) const noexcept
     {
-        return compare(other) == 1I8;
+        return compare(other) > 0I8;
     }
 
     inline Bool operator>=(const Type *other) const noexcept
     {
-        return compare(other) != -1I8;
+        return compare(other) >= 0I8;
     }
 
 #pragma endregion 
 
     Void clear() noexcept
     {
-        *begin() = Type();
-        size &= SSO_FLAG;
+        if (size & SSO_FLAG)
+        {
+            smallText[0] = Type();
+        } else {
+            elements[0] = Type();
+        }
     }
 
     Void finalize() noexcept
     {
         if (size & SSO_FLAG)
         {
-            clear();
+            smallText[0] = Type();
             return;
         }
 

@@ -214,7 +214,7 @@ public:
             current = current->bucketNext;
         }
 
-        Node *newNode = Memory::allocate<Node, false>(nodesAllocatorInfo);
+        Node *newNode = Memory::allocate<Node>(nodesAllocatorInfo);
 
         if constexpr (Copyable<KeyType>)
         {
@@ -279,7 +279,7 @@ public:
             current = current->bucketNext;
         }
 
-        Node *newNode = Memory::allocate<Node, false>(nodesAllocatorInfo);
+        Node *newNode = Memory::allocate<Node>(nodesAllocatorInfo);
 
         if constexpr (Moveable<KeyType>)
         {
@@ -342,7 +342,7 @@ public:
             current = current->bucketNext;
         }
 
-        Node *newNode = Memory::allocate<Node, false>(nodesAllocatorInfo);
+        Node *newNode = Memory::allocate<Node>(nodesAllocatorInfo);
 
         if constexpr (Moveable<KeyType>)
         {
@@ -396,7 +396,7 @@ public:
             current = current->bucketNext;
         }
 
-        Node *newNode = Memory::allocate<Node, false>(nodesAllocatorInfo);
+        Node *newNode = Memory::allocate<Node>(nodesAllocatorInfo);
 
         if constexpr (Copyable<KeyType>)
         {
@@ -516,7 +516,7 @@ public:
         Node *current = buckets[index];
         while (current != nullptr) // Check if exists
         {
-            if (current->key == key)
+            if (current->key == key) [[likely]]
             {
                 return Iterator{ current };
             }

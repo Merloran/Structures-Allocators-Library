@@ -66,7 +66,7 @@ public:
         if constexpr (Moveable<Type>)
         {
             Type *data = newElements;
-            const Type *sourceData = elements;
+            Type *sourceData = elements;
             const Type *sourceDataEnd = elements + size;
             for (; sourceData < sourceDataEnd; ++data, ++sourceData)
             {
@@ -162,7 +162,7 @@ public:
         }
     }
 
-    Type &append(const Type &element) noexcept
+    Type &push_back(const Type &element) noexcept
     {
         if (capacity == size)
         {
@@ -183,7 +183,7 @@ public:
         return target;
     }
 
-    Type &emplace(Type &element) noexcept
+    Type &emplace_back(Type &element) noexcept
     {
         if (capacity == size)
         {
