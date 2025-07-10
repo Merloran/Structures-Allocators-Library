@@ -12,8 +12,6 @@ find_package(xxHash CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 
-add_executable(${targetName} "Code/main.cpp")
-
 file(GLOB_RECURSE sourceFiles
      "${CMAKE_SOURCE_DIR}/Code/*.cpp"
      "${CMAKE_SOURCE_DIR}/Code/*.h"
@@ -22,7 +20,7 @@ file(GLOB_RECURSE sourceFiles
 
 list(REMOVE_ITEM sourceFiles "${CMAKE_SOURCE_DIR}/Code/main.cpp")
 
-target_sources(${targetName} PRIVATE ${sourceFiles})
+add_library(${targetName} STATIC ${sourceFiles})
 
 source_group("Project" FILES "Code/main.cpp")
 foreach(sourceFile IN ITEMS ${sourceFiles})
@@ -40,21 +38,21 @@ target_link_libraries(${targetName} PRIVATE xxHash::xxhash)
 target_precompile_headers(${targetName} PRIVATE Code/Core/Utilities/pch.hpp)
 if (MSVC)
     target_compile_options(${targetName} PRIVATE
-        /utf-8
-        /W4
-        /WX
-        /Qspectre-
-        /external:W0
-        /external:anglebrackets
-        "/FI${CMAKE_BINARY_DIR}/CMakeFiles/${targetName}.dir/$<CONFIG>/cmake_pch.hxx")
+						   /utf-8
+						   /W4
+						   /WX
+						   /Qspectre-
+						   /external:W0
+						   /external:anglebrackets
+						   "/FI${CMAKE_BINARY_DIR}/CMakeFiles/${targetName}.dir/$<CONFIG>/cmake_pch.hxx")
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(${targetName} PRIVATE 
-        -Wall
-        -Wextra
-        -Werror
-        -include "$(IntDir)cmake_pch.hxx")
+						   -Wall
+						   -Wextra
+						   -Werror
+						   -include "$(IntDir)cmake_pch.hxx")
 endif()
 
-target_include_directories(${targetName} PRIVATE
-    ${CMAKE_SOURCE_DIR}/Code
-    ${CMAKE_SOURCE_DIR}/Code/Core)
+target_include_directories(${targetName} PUBLIC
+						   ${CMAKE_SOURCE_DIR}/Code
+						   ${CMAKE_SOURCE_DIR}/Code/Core)
