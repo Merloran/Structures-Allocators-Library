@@ -36,7 +36,6 @@ public:
 private:
     RBNode *align_node(RBNode *node, USize alignment) const noexcept;
 
-
     Void rotate_left(RBNode *node) noexcept;
 
     Void rotate_right(RBNode *node) noexcept;
@@ -53,7 +52,7 @@ private:
 
     // Mostly used for debug, because size can be duplicated and Its looking for node with specific address It needs to dfs tree sometimes
     Bool contains(const RBNode *node) const noexcept;
-    // Debug stuff
+
     [[nodiscard]]
     Bool validate_tree() const noexcept;
 
