@@ -162,6 +162,7 @@ public:
         }
     }
 
+
     Type &push_back(const Type &element) noexcept
     {
         if (capacity == size)
@@ -182,6 +183,55 @@ public:
 
         return target;
     }
+
+    Type &push(const Type &element, const USize index) noexcept
+    {
+        assert(index > size && "Element cannot be push after back!");
+        if (capacity == size)
+        {
+            SPDLOG_WARN("Reallocation during append, try reserve more memory: {}", capacity + EXPANSION_SIZE);
+            reserve(capacity + EXPANSION_SIZE);
+        }
+
+        Type* currentElement = &elements[size];
+        Type* previousElement = (currentElement - 1);
+        for (USize i = size; i > index; --i, --currentElement, --previousElement)
+        {
+            if constexpr (Moveable<Type>)
+            {
+                currentElement->move(*previousElement);
+            }
+            else if constexpr (Copyable<Type>)
+            {
+                currentElement->copy(*previousElement);
+
+                if constexpr (Finalizable<Type>) // This is not necessary, but if someone doesn't want to have move, this should help avoid leaks
+                {
+                    previousElement->finalize();
+                }
+            } else {
+                *currentElement = *previousElement;
+            }
+        }
+
+        Type& target = elements[index];
+        if constexpr (Copyable<Type>)
+        {
+            target.copy(element);
+        } else {
+            target = element;
+        }
+
+        ++size;
+
+        return target;
+    }
+
+    Type &push_front(const Type &element) noexcept
+    {
+        return push(element, 0);
+    }
+
 
     Type &emplace_back(Type &element) noexcept
     {
@@ -207,6 +257,257 @@ public:
 
         return target;
     }
+
+    Type &emplace(Type& element, const USize index) noexcept
+    {
+        assert(index > size && "Element cannot be push after back!");
+        if (capacity == size)
+        {
+            SPDLOG_WARN("Reallocation during append, try reserve more memory: {}", capacity + EXPANSION_SIZE);
+            reserve(capacity + EXPANSION_SIZE);
+        }
+
+        Type* currentElement = &elements[size];
+        Type* previousElement = (currentElement - 1);
+        for (USize i = size; i > index; --i, --currentElement, --previousElement)
+        {
+            if constexpr (Moveable<Type>)
+            {
+                currentElement->move(*previousElement);
+            }
+            else if constexpr (Copyable<Type>)
+            {
+                currentElement->copy(*previousElement);
+
+                if constexpr (Finalizable<Type>) // This is not necessary, but if someone doesn't want to have move, this should help avoid leaks
+                {
+                    previousElement->finalize();
+                }
+            } else {
+                *currentElement = *previousElement;
+            }
+        }
+
+
+        Type& target = elements[index];
+        if constexpr (Moveable<Type>)
+        {
+            target.move(element);
+        }
+        else if constexpr (Copyable<Type>)
+        {
+            target.copy(element);
+        } else {
+            target = element;
+        }
+
+
+        ++size;
+
+        return target;
+    }
+
+    Type &emplace_front(Type& element) noexcept
+    {
+        return emplace(element, 0);
+    }
+
+
+    Void remove_back() noexcept
+    {
+        if constexpr (Finalizable<Type>)
+        {
+            elements[size].finalize();
+        }
+        --size;
+    }
+
+    Void remove(const USize index) noexcept
+    {
+        if constexpr (Finalizable<Type>)
+        {
+            elements[index].finalize();
+        }
+
+        Type* currentElement = &elements[index];
+        Type* nextElement = (currentElement + 1);
+        for (USize i = index; i < size; ++i, ++currentElement, ++nextElement)
+        {
+            if constexpr (Moveable<Type>)
+            {
+                currentElement->move(*nextElement);
+            }
+            else if constexpr (Copyable<Type>)
+            {
+                currentElement->copy(*nextElement);
+
+                if constexpr (Finalizable<Type>) // This is not necessary, but if someone doesn't want to have move, this should help avoid leaks
+                {
+                    nextElement->finalize();
+                }
+            } else {
+                *currentElement = *nextElement;
+            }
+        }
+
+        --size;
+    }
+
+    Void remove_front() noexcept
+    {
+        remove(0);
+    }
+
+    // Remove element and swap with last element
+    Void remove_swap(USize index)
+    {
+        if constexpr (Finalizable<Type>)
+        {
+            elements[index].finalize();
+        }
+
+        if constexpr (Moveable<Type>)
+        {
+            elements[index].move(elements[size]);
+        }
+        else if constexpr (Copyable<Type>)
+        {
+            elements[index].copy(elements[size]);
+
+            if constexpr (Finalizable<Type>)
+            {
+                elements[size].finalize();
+            }
+        } else {
+            elements[index] = elements[size];
+        }
+
+        --size;
+    }
+
+
+    [[nodiscard("Use remove_back")]]
+    Type pop_back() noexcept
+    {
+        Type element; 
+
+        if constexpr (Moveable<Type>)
+        {
+            element.move(elements[size]);
+        }
+        else if constexpr (Copyable<Type>)
+        {
+            element.copy(elements[size]);
+
+            if constexpr (Finalizable<Type>)
+            {
+                elements[size].finalize();
+            }
+        } else {
+            element = elements[size];
+        }
+        --size;
+
+        return element;
+    }
+
+    [[nodiscard("Use remove")]]
+    Type pop(const USize index) noexcept
+    {
+        Type element;
+
+        if constexpr (Moveable<Type>)
+        {
+            element.move(elements[index]);
+        }
+        else if constexpr (Copyable<Type>)
+        {
+            element.copy(elements[index]);
+
+            if constexpr (Finalizable<Type>)
+            {
+                elements[index].finalize();
+            }
+        } else {
+            element = elements[index];
+        }
+
+        Type* currentElement = &elements[index];
+        Type* nextElement = (currentElement + 1);
+        for (USize i = index; i < size; ++i, ++currentElement, ++nextElement)
+        {
+            if constexpr (Moveable<Type>)
+            {
+                currentElement->move(*nextElement);
+            }
+            else if constexpr (Copyable<Type>)
+            {
+                currentElement->copy(*nextElement);
+
+                if constexpr (Finalizable<Type>) // This is not necessary, but if someone doesn't want to have move, this should help avoid leaks
+                {
+                    nextElement->finalize();
+                }
+            } else {
+                *currentElement = *nextElement;
+            }
+        }
+
+        --size;
+
+        return element;
+    }
+
+    [[nodiscard("Use remove_front")]]
+    Type pop_front() noexcept
+    {
+        return pop(0);
+    }
+
+    // Remove element and swap with last element
+    [[nodiscard("Use remove_swap")]]
+    Type pop_swap(USize index)
+    {
+        Type element; 
+
+        if constexpr (Moveable<Type>)
+        {
+            element.move(elements[index]);
+        }
+        else if constexpr (Copyable<Type>)
+        {
+            element.copy(elements[index]);
+
+            if constexpr (Finalizable<Type>)
+            {
+                elements[index].finalize();
+            }
+        } else {
+            element = elements[index];
+        }
+
+        if constexpr (Moveable<Type>)
+        {
+            elements[index].move(elements[size]);
+        }
+        else if constexpr (Copyable<Type>)
+        {
+            elements[index].copy(elements[size]);
+
+            if constexpr (Finalizable<Type>)
+            {
+                elements[size].finalize();
+            }
+        }
+        else {
+            elements[index] = elements[size];
+        }
+
+        --size;
+
+        return element;
+    }
+
 
     [[nodiscard]]
     USize get_capacity() const noexcept
