@@ -1,5 +1,9 @@
 #pragma once
-#include "Memory/memory_utils.hpp"
+#include "Serrate/Utilities/types.hpp"
+#include "Serrate/Memory/memory_utils.hpp"
+
+#include <spdlog/spdlog.h>
+
 
 template <Manual Type>
 class DynamicArray

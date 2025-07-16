@@ -1,4 +1,6 @@
 #pragma once
+#include "Serrate/Utilities/types.hpp"
+#include "Serrate/Memory/byte.hpp"
 
 struct RBNode;
 // TODO: Add support for RBNode 
@@ -48,7 +50,7 @@ private:
 
     Void fix_remove(RBNode *node, RBNode *parent) noexcept;
 
-    Void print_helper(const RBNode *node, std::string indent, Bool last) noexcept;
+    // Void print_helper(const RBNode *node, std::string indent, Bool last) noexcept;
 
     // Mostly used for debug, because size can be duplicated and Its looking for node with specific address It needs to dfs tree sometimes
     Bool contains(const RBNode *node) const noexcept;

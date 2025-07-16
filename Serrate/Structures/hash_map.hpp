@@ -1,5 +1,9 @@
 #pragma once
-#include "Utilities/cryptography.hpp"
+#include "Serrate/Utilities/types.hpp"
+#include "Serrate/Utilities/cryptography.hpp"
+#include "Serrate/Memory/memory_utils.hpp"
+
+#include <algorithm>
 
 template<typename Type>
 concept MethodHashable = requires(Type &element)

@@ -1,4 +1,5 @@
 #pragma once
+#include "Serrate/Utilities/types.hpp"
 
 template<typename... Types>
 class View;

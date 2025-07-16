@@ -1,8 +1,13 @@
 #pragma once
+#include "Serrate/Utilities/types.hpp"
+
 //TODO: Think of linux support
 #if defined(_WIN32)
 #define NOMINMAX
 #include <windows.h>
+#include <type_traits>
+
+
 static constexpr USize GET_PAGE_SIZE()
 {
     return 4096;

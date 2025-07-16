@@ -1,4 +1,6 @@
 #pragma once
+#include "Serrate/Utilities/types.hpp"
+#include "Serrate/Memory/byte.hpp"
 
 //Node contains compressed pointers to 4.5 bytes
 struct RBNodePacked

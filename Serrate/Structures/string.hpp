@@ -1,9 +1,9 @@
 #pragma once
-#include "Memory/memory_utils.hpp"
+#include "Serrate/Memory/memory_utils.hpp"
+#include "Serrate/Utilities/cryptography.hpp"
 
+#include <spdlog/spdlog.h>
 #include <codecvt>
-
-#include "Utilities/cryptography.hpp"
 
 template <typename Type>
 concept Character =

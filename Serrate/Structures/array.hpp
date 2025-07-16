@@ -1,4 +1,8 @@
 #pragma once
+#include "Serrate/Utilities/types.hpp"
+
+#include <cassert>
+#include <concepts>
 
 template <Manual Type, USize Size>
 class Array

@@ -1,5 +1,7 @@
 #include "rb_node_packed.hpp"
 
+#include <cassert>
+
 RBNodePacked *RBNodePacked::get_parent(Byte *memory) const noexcept
 {
     constexpr USize DATA_OFFSET = 0;

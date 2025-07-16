@@ -1,5 +1,10 @@
 #pragma once
+#include "Serrate/Utilities/types.hpp"
 #include "byte.hpp"
+
+#include <cassert>
+#include <bit>
+#include <new>
 
 struct AllocatorInfo
 {
@@ -14,9 +19,9 @@ struct AllocatorInfo
     {
         static AllocatorInfo defaultAllocator = 
         {
-            nullptr,
-            [](Void *allocator, USize bytes, USize alignment) -> Byte *{ return byte_cast(_aligned_malloc(bytes, alignment)); },
-            [](Void *allocator, Byte *pointer) { _aligned_free(pointer); }
+	        .allocator  = nullptr,
+	        .allocate   = []([[maybe_unused]] Void *allocator, USize bytes, USize alignment) -> Byte *{ return byte_cast(_aligned_malloc(bytes, alignment)); },
+	        .deallocate = []([[maybe_unused]] Void *allocator, Byte *pointer) { _aligned_free(pointer); }
         };
         return &defaultAllocator;
     }

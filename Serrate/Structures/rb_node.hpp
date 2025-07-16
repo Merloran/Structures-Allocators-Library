@@ -1,4 +1,6 @@
 #pragma once
+#include "Serrate/Memory/byte.hpp"
+#include "Serrate/Utilities/types.hpp"
 
 struct RBNode
 {

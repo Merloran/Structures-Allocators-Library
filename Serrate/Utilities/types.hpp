@@ -1,13 +1,16 @@
 #pragma once
+#include <cstdint>
+#include <type_traits>
+
 // Rename to be consistent with naming_convention
 using Bool	  = bool;
 using Void	  = void;
 
-using Char   = char;
-using WChar  = wchar_t;
-using Char8  = char8_t;
-using Char16 = char16_t;
-using Char32 = char32_t;
+using Char    = char;
+using WChar   = wchar_t;
+using Char8   = char8_t;
+using Char16  = char16_t;
+using Char32  = char32_t;
               
 using Int8	  = int8_t;
 using Int16	  = int16_t;

@@ -1,4 +1,6 @@
 #pragma once
+#include "types.hpp"
+
 #include <xxhash.h>
 
 namespace Cryptography

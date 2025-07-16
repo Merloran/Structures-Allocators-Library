@@ -1,35 +1,29 @@
 #pragma once
-#include "Memory/memory_utils.hpp"
-
-struct PoolBlock
-{
-    PoolBlock *next;
-};
+#include "memory_utils.hpp"
 
 // Always initialize and when memory is not given finalize this allocator
-class PoolAllocator
+class StackAllocator
 {
 private:
     AllocatorInfo selfInfo;
     AllocatorInfo *parentInfo;
     Byte          *memory;
-    PoolBlock     *freeList;
-    USize         capacity;
-    USize         blockSize;
+    USize          capacity;
+    USize          offset;
 
 public:
-    PoolAllocator()
+    StackAllocator() noexcept
         : selfInfo({})
         , parentInfo(nullptr)
         , memory(nullptr)
-        , freeList(nullptr)
         , capacity(0)
-        , blockSize(0)
+        , offset(0)
     {}
 
-    Void initialize(USize count, USize size) noexcept;
-    Void initialize(USize count, USize size, AllocatorInfo *allocatorInfo) noexcept;
+    Void initialize(USize bytes) noexcept;
+    Void initialize(USize bytes, AllocatorInfo *allocatorInfo) noexcept;
 
+    [[nodiscard]]
     Byte *allocate(USize bytes, USize alignment) noexcept;
     template <Manual Type>
     [[nodiscard]]
@@ -44,6 +38,8 @@ public:
         return Memory::start_object<Type>(allocate(count * sizeof(Type), alignof(Type)), count);
     }
 
+
+    Void deallocate(USize marker = 0) noexcept;
     Void deallocate(Byte *pointer) noexcept;
     template <Manual Type>
     Void deallocate(Type *pointer) noexcept
@@ -51,15 +47,12 @@ public:
         deallocate(byte_cast(pointer));
     }
 
-    Void copy(const PoolAllocator &source) noexcept;
+    Void copy(const StackAllocator &source) noexcept;
 
-    Void move(PoolAllocator &source) noexcept;
+    Void move(StackAllocator &source) noexcept;
 
     [[nodiscard]]
     USize get_capacity() const noexcept;
-
-    [[nodiscard]]
-    USize get_block_size() const noexcept;
 
     Void finalize() noexcept;
 

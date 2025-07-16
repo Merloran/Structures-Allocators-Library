@@ -1,5 +1,5 @@
 #pragma once
-#include "Memory/memory_utils.hpp"
+#include "Serrate/Memory/memory_utils.hpp"
 
 
 template <Manual Type>
@@ -29,7 +29,7 @@ public:
             : node(nullptr)
         {}
 
-        Iterator(Node *initialNode) noexcept
+        explicit Iterator(Node *initialNode) noexcept
             : node(initialNode)
         {}
 
@@ -40,7 +40,7 @@ public:
         }
 
         [[nodiscard]]
-        const Node* get_node() const noexcept
+        const Node *get_node() const noexcept
         {
             return node;
         }

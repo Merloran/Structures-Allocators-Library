@@ -1,6 +1,10 @@
 #include "rb_tree.hpp"
+
 #include "rb_node.hpp"
+#include "Serrate/Memory/memory_utils.hpp"
+
 #include <magic_enum/magic_enum.hpp>
+#include <spdlog/spdlog.h>
 
 Void RBTree::insert(RBNode* node, const Bool shouldCoalesce) noexcept
 {
@@ -197,7 +201,7 @@ Void RBTree::print_tree() noexcept
     }
 
     SPDLOG_INFO("Red-Black Tree:");
-    print_helper(root, "", true);
+    // print_helper(root, "", true);
 }
 
 Void RBTree::clear() noexcept
@@ -545,24 +549,24 @@ Bool RBTree::contains(const RBNode* node) const noexcept
     return dfs(root);
 }
 
-Void RBTree::print_helper(const RBNode* node, std::string indent, const Bool last) noexcept
-{
-    if (node)
-    {
-        printf("%s", indent.c_str());
-        if (last)
-        {
-            printf("R----");
-            indent += "   ";
-        } else {
-            printf("L----");
-            indent += "|  ";
-        }
-        printf("%llu<%p>(%s)\n", node->get_size(), node, std::string(magic_enum::enum_name(node->get_color())).c_str());
-        print_helper(node->get_left(), indent, false);
-        print_helper(node->get_right(), indent, true);
-    }
-}
+// Void RBTree::print_helper(const RBNode* node, std::string indent, const Bool last) noexcept
+// {
+//     if (node)
+//     {
+//         printf("%s", indent.c_str());
+//         if (last)
+//         {
+//             printf("R----");
+//             indent += "   ";
+//         } else {
+//             printf("L----");
+//             indent += "|  ";
+//         }
+//         printf("%llu<%p>(%s)\n", node->get_size(), node, std::string(magic_enum::enum_name(node->get_color())).c_str());
+//         print_helper(node->get_left(), indent, false);
+//         print_helper(node->get_right(), indent, true);
+//     }
+// }
 
 Bool RBTree::validate_tree() const noexcept
 {
