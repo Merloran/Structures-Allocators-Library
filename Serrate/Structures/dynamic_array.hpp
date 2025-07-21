@@ -44,6 +44,30 @@ public:
         elements = Memory::allocate<Type>(allocatorInfo, capacity);
     }
 
+    template <Manual... Types>
+    Void initialize(AllocatorInfo *allocator, const Types&... params) noexcept
+    requires (std::is_convertible_v<std::decay_t<Types>, Type> && ...)
+    {
+        assert(allocator && "Allocator is nullptr!");
+        allocatorInfo = allocator;
+
+        size     = sizeof...(Types);
+        capacity = size;
+        elements = Memory::allocate<Type>(allocatorInfo, capacity);
+
+        USize index = 0;
+        ([&] (const Type& value)
+        {
+            if constexpr (Copyable<Type>)
+            {
+                elements[index].copy(value);
+            } else {
+                elements[index] = value;
+            }
+            ++index;
+        }(params), ...);
+    }
+
     Void initialize(const USize initialSize, 
                     const Type& initialElement, 
                     AllocatorInfo *allocator = AllocatorInfo::get_default_allocator()) noexcept

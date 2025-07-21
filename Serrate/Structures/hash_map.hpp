@@ -1,4 +1,5 @@
 #pragma once
+#include "string_view.hpp"
 #include "Serrate/Utilities/types.hpp"
 #include "Serrate/Utilities/cryptography.hpp"
 #include "Serrate/Memory/memory_utils.hpp"
@@ -423,6 +424,29 @@ public:
         return newNode->value;
     }
 
+    ValueType &operator[](const StringView &key) noexcept
+    requires std::is_same_v<KeyType, String>
+    {
+        const UInt64 hash = key.hash();
+
+        USize index = hash & (capacity - 1);
+        Node *current = buckets[index];
+
+        while (current != nullptr) // Check if exists
+        {
+            if (current->key == key)
+            {
+                return current->value;
+            }
+            current = current->bucketNext;
+        }
+
+        assert(false && "Invalid use of this operator String should be passed instead!");
+        // NEVER REACHED - this is undefined behavior by design
+        // Using this return value is a programming error
+        return *reinterpret_cast<const ValueType *>(nullptr);
+    }
+
     const ValueType &operator[](const KeyType &key) const noexcept
     {
         UInt64 hash;
@@ -451,6 +475,29 @@ public:
         return *reinterpret_cast<const ValueType *>(nullptr);
     }
 
+    const ValueType &operator[](const StringView &key) const noexcept
+    requires std::is_same_v<KeyType, String>
+    {
+        const UInt64 hash = key.hash();
+
+        USize index = hash & (capacity - 1);
+        Node *current = buckets[index];
+
+        while (current != nullptr) // Check if exists
+        {
+            if (current->key == key)
+            {
+                return current->value;
+            }
+            current = current->bucketNext;
+        }
+
+        assert(false && "Given key does not exists in map!");
+        // NEVER REACHED - this is undefined behavior by design
+        // Using this return value is a programming error
+        return *reinterpret_cast<const ValueType *>(nullptr);
+    }
+
     USize remove(const KeyType &key) noexcept
     {
         UInt64 hash;
@@ -460,6 +507,50 @@ public:
         } else {
             hash = key.hash();
         }
+
+        USize index = hash & (capacity - 1);
+        Node *current = buckets[index];
+        Node *previous =  nullptr;
+
+        while (current != nullptr) // Check if exists
+        {
+            if (current->key == key)
+            {
+                if constexpr (Finalizable<KeyType>)
+                {
+                    current->key.finalize();
+                }
+                if constexpr (Finalizable<ValueType>)
+                {
+                    current->value.finalize();
+                }
+
+                if (previous)
+                {
+                    previous->bucketNext = current->bucketNext;
+                } else {
+                    buckets[index] = current->bucketNext;
+                }
+
+                current->elementNext->elementPrevious = current->elementPrevious;
+                current->elementPrevious->elementNext = current->elementNext;
+
+                Memory::deallocate(nodesAllocatorInfo, current);
+
+                --size;
+
+                return 1;
+            }
+            previous = current;
+            current = current->bucketNext;
+        }
+        return 0;
+    }
+
+    USize remove(const StringView &key) noexcept
+    requires std::is_same_v<KeyType, String>
+    {
+        const UInt64 hash = key.hash();
 
         USize index = hash & (capacity - 1);
         Node *current = buckets[index];
@@ -531,6 +622,26 @@ public:
     }
 
     [[nodiscard]]
+    Iterator find(const StringView &key) const noexcept
+    requires std::is_same_v<KeyType, String>
+    {
+        const UInt64 hash = key.hash();
+
+        USize index = hash & (capacity - 1);
+        Node *current = buckets[index];
+        while (current != nullptr) // Check if exists
+        {
+            if (current->key == key) [[likely]]
+            {
+                return Iterator{ current };
+            }
+            current = current->bucketNext;
+        }
+
+        return end();
+    }
+
+    [[nodiscard]]
     Bool contains(const KeyType &key) const noexcept
     {
         UInt64 hash;
@@ -540,6 +651,26 @@ public:
         } else {
             hash = key.hash();
         }
+
+        USize index = hash & (capacity - 1);
+        Node *current = buckets[index];
+        while (current != nullptr) // Check if exists
+        {
+            if (current->key == key)
+            {
+                return true;
+            }
+            current = current->bucketNext;
+        }
+
+        return false;
+    }
+
+    [[nodiscard]]
+    Iterator contains(const StringView &key) const noexcept
+    requires std::is_same_v<KeyType, String>
+    {
+        const UInt64 hash = key.hash();
 
         USize index = hash & (capacity - 1);
         Node *current = buckets[index];

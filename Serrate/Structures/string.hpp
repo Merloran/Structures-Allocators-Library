@@ -1,17 +1,11 @@
 #pragma once
 #include "Serrate/Memory/memory_utils.hpp"
 #include "Serrate/Utilities/cryptography.hpp"
+#include "string_view.hpp"
 
 #include <spdlog/spdlog.h>
 #include <codecvt>
 
-template <typename Type>
-concept Character =
-std::is_same_v<Type, Char  > || 
-std::is_same_v<Type, Char8 > || 
-std::is_same_v<Type, WChar > ||
-std::is_same_v<Type, Char16> ||
-std::is_same_v<Type, Char32>;
 
 //TODO: Implement commented methods
 //      Optimize replace and find
@@ -81,14 +75,30 @@ public:
 
         allocatorInfo = allocator;
 
-        if (!text)
+        size = BasicStringView<Type>::length(text);
+        Bool useSSO = size <= SSO_CAPACITY;
+        if (useSSO)
         {
-            size = SSO_FLAG;
-            smallText[0] = Type();
+            memcpy(smallText, text, (size + 1) * sizeof(Type));
+            size |= SSO_FLAG;
             return;
         }
 
-        size = BasicString::length(text);
+        capacity = size + 1;
+        elements = Memory::allocate<Type, false>(allocatorInfo, capacity);
+        memcpy(elements, text, capacity * sizeof(Type));
+    }
+
+    template <USize Count>
+    Void initialize(const Type text[Count],
+                    AllocatorInfo *allocator = AllocatorInfo::get_default_allocator()) noexcept
+    {
+        assert(allocator && "Invalid pointer!");
+        assert(text && "Invalid pointer!");
+
+        allocatorInfo = allocator;
+
+        size = Count;
         Bool useSSO = size <= SSO_CAPACITY;
         if (useSSO)
         {
@@ -151,7 +161,7 @@ public:
             return false;
         }
 
-        const USize prefixSize = BasicString::length(prefix);
+        const USize prefixSize = BasicStringView<Type>::length(prefix);
         if (get_size() < prefixSize)
         {
             return false;
@@ -179,7 +189,7 @@ public:
             return false;
         }
 
-        const USize suffixSize = BasicString::length(suffix);
+        const USize suffixSize = BasicStringView<Type>::length(suffix);
         if (get_size() < suffixSize)
         {
             return false;
@@ -292,7 +302,7 @@ public:
             return ~USize(0);
         }
 
-        const USize substringSize = BasicString::length(substring);
+        const USize substringSize = BasicStringView<Type>::length(substring);
         const USize selfSize = size & ~SSO_FLAG;
         switch (strategy)
         {
@@ -413,7 +423,7 @@ public:
             return false;
         }
 
-        const USize substringSize = BasicString::length(substring);
+        const USize substringSize = BasicStringView<Type>::length(substring);
         const USize selfSize = size & ~SSO_FLAG;
 
         if (selfSize < substringSize)
@@ -443,6 +453,16 @@ public:
         return memcmp(begin(), other.begin(), size & ~SSO_FLAG);
     }
 
+    Int8 compare(const BasicStringView<Type> &other) const noexcept
+    {
+        if (get_size() != other.get_size())
+        {
+            return false;
+        }
+
+        return memcmp(begin(), other.begin(), size & ~SSO_FLAG);
+    }
+
     Int8 compare(const Type        *other) const noexcept
     {
         return strcmp(begin(), other);
@@ -459,13 +479,23 @@ public:
         return memcmp(begin(), other.begin(), size & ~SSO_FLAG) == 0;
     }
 
+    Bool equals(const BasicStringView<Type> &other) const noexcept
+    {
+        if (get_size() != other.get_size())
+        {
+            return false;
+        }
+
+        return memcmp(begin(), other.begin(), size & ~SSO_FLAG) == 0;
+    }
+
     Bool equals(const Type        *other) const noexcept
     {
         return strcmp(begin(), other) == 0;
     }
 
 
-    Void insert(const USize position, const BasicString &other) noexcept
+    Void push(const USize position, const BasicString &other) noexcept
     {
         const USize selfSize = size & ~SSO_FLAG;
         assert(position <= selfSize);
@@ -487,7 +517,7 @@ public:
         *end() = Type();
     }
 
-    Void insert(const USize position, const Type        *other) noexcept
+    Void push(const USize position, const Type        *other) noexcept
     {
         if (!other)
         {
@@ -497,7 +527,7 @@ public:
         const USize selfSize = size & ~SSO_FLAG;
         assert(position <= selfSize);
 
-        const USize otherSize = BasicString::length(other);
+        const USize otherSize = BasicStringView<Type>::length(other);
         if (otherSize == 0)
         {
             return;
@@ -515,7 +545,7 @@ public:
     }
 
 
-    Void append(const BasicString &other) noexcept
+    Void push_back(const BasicString &other) noexcept
     {
         const USize selfSize = get_size();
         const USize otherSize = other.get_size();
@@ -527,7 +557,7 @@ public:
         *end() = Type();
     }
 
-    Void append(const Type        *other) noexcept
+    Void push_back(const Type        *other) noexcept
     {
         if (!other)
         {
@@ -535,7 +565,7 @@ public:
         }
 
         const USize selfSize = get_size();
-        const USize otherSize = BasicString::length(other);
+        const USize otherSize = BasicStringView<Type>::length(other);
 
         reserve(selfSize + otherSize);
 
@@ -544,7 +574,7 @@ public:
         *end() = Type();
     }
 
-    Void append(const Type         other) noexcept
+    Void push_back(const Type         other) noexcept
     {
         reserve(get_size() + 1);
 
@@ -601,7 +631,7 @@ public:
             return;
         }
 
-        const USize oldSubstringSize = BasicString::length(oldSubstring);
+        const USize oldSubstringSize = BasicStringView<Type>::length(oldSubstring);
 
         if (oldSubstringSize == 0)
         {
@@ -610,7 +640,7 @@ public:
         }
 
         USize selfSize = get_size();
-        const USize newSubstringSize = BasicString::length(newSubstring);
+        const USize newSubstringSize = BasicStringView<Type>::length(newSubstring);
         const Int64 sizeDifference = newSubstringSize - oldSubstringSize;
         if (oldSubstringSize < newSubstringSize)
         {
@@ -647,7 +677,7 @@ public:
             return;
         }
 
-        const USize oldSubstringSize = BasicString::length(oldSubstring);
+        const USize oldSubstringSize = BasicStringView<Type>::length(oldSubstring);
 
         if (oldSubstringSize == 0)
         {
@@ -701,7 +731,7 @@ public:
         }
 
         const USize selfSize = get_size();
-        const USize newSubstringSize = BasicString::length(newSubstring);
+        const USize newSubstringSize = BasicStringView<Type>::length(newSubstring);
         const Int64 sizeDifference = newSubstringSize - oldSubstringSize;
         if (oldSubstringSize < newSubstringSize)
         {
@@ -764,7 +794,7 @@ public:
             {
                 USize offset = 0;
                 Type *selfBegin = begin();
-                for (Type *element = selfBegin; BasicString::is_white_space(*element); ++element)
+                for (Type *element = selfBegin; BasicStringView<Type>::is_white_space(*element); ++element)
                 {
                     ++offset;
                 }
@@ -775,7 +805,7 @@ public:
             }
             case EStringTrimStrategy::End:
             {
-                for (Type *element = end() - 1; BasicString::is_white_space(*element); --element)
+                for (Type *element = end() - 1; BasicStringView<Type>::is_white_space(*element); --element)
                 {
                     --size;
                 }
@@ -787,7 +817,7 @@ public:
                 USize offset = 0;
                 for (Type *element = begin(); *element != Type(); ++element)
                 {
-                    if (BasicString::is_white_space(*element))
+                    if (BasicStringView<Type>::is_white_space(*element))
                     {
                         ++offset;
                     } else {
@@ -919,6 +949,7 @@ public:
         return size & SSO_FLAG ? smallText : elements;
     }
 
+    [[nodiscard]]
     const Type *get_data() const noexcept
     {
         return size & SSO_FLAG ? smallText : elements;
@@ -950,13 +981,13 @@ public:
 
 #pragma region OPERATORS
 
-    inline Type &operator[](USize index) noexcept
+    Type &operator[](USize index) noexcept
     {
         assert(index < size & ~SSO_FLAG);
         return size & SSO_FLAG ? smallText[index] : elements[index];
     }
 
-    inline Type  operator[](USize index) const noexcept
+    Type  operator[](USize index) const noexcept
     {
         assert(index < size & ~SSO_FLAG);
         return size & SSO_FLAG ? smallText[index] : elements[index];
@@ -988,79 +1019,110 @@ public:
     }
 
 
-    inline Void operator+=(const BasicString   &other)  noexcept
+    Void operator+=(const BasicString   &other)  noexcept
     {
         append(other);
     }
 
-    inline Void operator+=(const Type *other) noexcept
+    Void operator+=(const Type *other) noexcept
     {
         append(other);
     }
 
-    inline Void operator+=(      Type  other) noexcept
+    Void operator+=(      Type  other) noexcept
     {
         append(other);
     }
 
     
-    inline Bool operator!=(const BasicString &other) const noexcept 
+    Bool operator!=(const BasicString &other) const noexcept 
     {
         return !equals(other);
     }
     
-    inline Bool operator==(const BasicString &other) const noexcept
+    Bool operator==(const BasicString &other) const noexcept
     {
         return equals(other);
     }
     
-    inline Bool operator< (const BasicString &other) const noexcept
+    Bool operator< (const BasicString &other) const noexcept
     {
         return compare(other) < 0I8;
     }
     
-    inline Bool operator<=(const BasicString &other) const noexcept
+    Bool operator<=(const BasicString &other) const noexcept
     {
         return compare(other) <= 0I8;
     }
     
-    inline Bool operator> (const BasicString &other) const noexcept
+    Bool operator> (const BasicString &other) const noexcept
     {
         return compare(other) > 0I8;
     }
     
-    inline Bool operator>=(const BasicString &other) const noexcept
+    Bool operator>=(const BasicString &other) const noexcept
     {
         return compare(other) >= 0I8;
     }
 
 
-    inline Bool operator!=(const Type *other) const noexcept
+    Bool operator!=(const Type *other) const noexcept
     {
         return equals(other);
     }
 
-    inline Bool operator==(const Type *other) const noexcept
+    Bool operator==(const Type *other) const noexcept
     {
         return equals(other);
     }
 
-    inline Bool operator< (const Type *other) const noexcept
+    Bool operator< (const Type *other) const noexcept
     {
         return compare(other) < 0I8;
     }
 
-    inline Bool operator<=(const Type *other) const noexcept
+    Bool operator<=(const Type *other) const noexcept
     {
         return compare(other) <= 0I8;
     }
 
-    inline Bool operator> (const Type *other) const noexcept
+    Bool operator> (const Type *other) const noexcept
     {
         return compare(other) > 0I8;
     }
 
-    inline Bool operator>=(const Type *other) const noexcept
+    Bool operator>=(const Type *other) const noexcept
+    {
+        return compare(other) >= 0I8;
+    }
+
+
+    Bool operator!=(const BasicStringView<Type> &other) const noexcept
+    {
+        return equals(other);
+    }
+
+    Bool operator==(const BasicStringView<Type> &other) const noexcept
+    {
+        return equals(other);
+    }
+
+    Bool operator< (const BasicStringView<Type> &other) const noexcept
+    {
+        return compare(other) < 0I8;
+    }
+
+    Bool operator<=(const BasicStringView<Type> &other) const noexcept
+    {
+        return compare(other) <= 0I8;
+    }
+
+    Bool operator> (const BasicStringView<Type> &other) const noexcept
+    {
+        return compare(other) > 0I8;
+    }
+
+    Bool operator>=(const BasicStringView<Type> &other) const noexcept
     {
         return compare(other) >= 0I8;
     }
@@ -1097,61 +1159,6 @@ public:
     }
 
     // static String format(const CharacterType *fmt, ...);
-
-    static constexpr USize length(const Type *text) noexcept
-    requires !std::is_same_v<std::nullptr_t, Type>
-    {
-        if constexpr (std::is_same_v<Type, Char> || std::is_same_v<Type, Char8>)
-        {
-            return __builtin_strlen(reinterpret_cast<const Char *>(text));
-        }
-        else if constexpr (std::is_same_v<Type, WChar>)
-        {
-            return __builtin_wcslen(text);
-        }
-        else if constexpr (std::is_same_v<Type, Char16> && sizeof(WChar) == 2)
-        {
-            return __builtin_wcslen(reinterpret_cast<const WChar *>(text));
-        }
-        else if constexpr (std::is_same_v<Type, Char32> && sizeof(WChar) == 4)
-        {
-            return __builtin_wcslen(reinterpret_cast<const WChar *>(text));
-        } else {
-            USize length = 0;
-            while (*text != Type())
-            {
-                ++length;
-                ++text;
-            }
-
-            return length;
-        }
-    }
-
-    static constexpr Bool is_white_space(Type character)
-    {
-        if (character == Type(0x20) || (character >= Type(0x09) && character <= Type(0x0D)))
-        {
-            return true;
-        }
-
-        if constexpr (!std::is_same_v<Type, Char8> && !std::is_same_v<Type, Char>)
-        {
-            return character >= Type(0x00A0) && character <= Type(0x3000) &&
-                   (
-                       character == Type(0x00A0)                                         ||
-                       character == Type(0x1680)                                         ||
-                       (character >= Type(0x2000) && character <= Type(0x200A))          ||
-                       character == Type(0x2028)                                         ||
-                       character == Type(0x2029)                                         ||
-                       character == Type(0x202F)                                         ||
-                       character == Type(0x205F)                                         ||
-                       character == Type(0x3000)
-                   );
-        }
-
-        return false;
-    }
 };
 
 template <Character Type>
