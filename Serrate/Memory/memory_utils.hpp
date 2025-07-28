@@ -29,6 +29,16 @@ struct AllocatorInfo
 
 namespace Memory
 {
+    constexpr USize align_offset(const USize value, const USize alignment) noexcept
+    {
+        return (value + alignment - 1) & ~(alignment - 1);
+    }
+    template<typename Type>
+    constexpr USize align_offset(const USize value) noexcept
+    {
+        return (value + alignof(Type) - 1) & ~(alignof(Type) - 1);
+    }
+
     constexpr USize align_binary(const USize value) noexcept
     {
         return USize(1) << std::bit_width(value - USize(1));

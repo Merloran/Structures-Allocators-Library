@@ -57,7 +57,7 @@ public:
 
     template<USize Index>
     [[nodiscard]]
-    const auto& get() const noexcept
+    const auto &get() const noexcept
     {
         if constexpr (Index == 0)
         {

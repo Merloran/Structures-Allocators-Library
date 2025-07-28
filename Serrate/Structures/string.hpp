@@ -935,6 +935,7 @@ public:
         return size & SSO_FLAG ? SSO_CAPACITY : capacity;
     }
 
+    [[nodiscard]]
     UInt64 hash() const noexcept
     {
         if (size & SSO_FLAG)

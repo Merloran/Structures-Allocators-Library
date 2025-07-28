@@ -596,6 +596,37 @@ public:
         return remove(iterator.get_node()->key);
     }
 
+    Void move(HashMap &source) noexcept
+    {
+        assert(&source != this && "Tried to move hash map into itself!");
+
+        finalize();
+        buckets  = source.buckets;
+        sentinel = source.sentinel;
+        capacity      = source.capacity;
+        size          = source.size;
+        maxLoadFactor = source.maxLoadFactor;
+        bucketsAllocatorInfo = source.bucketsAllocatorInfo;
+        nodesAllocatorInfo   = source.nodesAllocatorInfo;
+
+        source = {};
+    }
+
+    Void copy(const HashMap &source) noexcept
+    {
+        assert(&source != this && "Tried to copy hash map into itself!");
+
+        finalize();
+        initialize(source.capacity, source.nodesAllocatorInfo, source.bucketsAllocatorInfo);
+
+        maxLoadFactor = source.maxLoadFactor;
+
+        for (Iterator iterator = source.begin(); iterator != source.end(); ++iterator)
+        {
+            push(iterator.get_node()->key, *iterator);
+        }
+    }
+
     [[nodiscard]]
     Iterator find(const KeyType &key) const noexcept
     {
@@ -718,6 +749,26 @@ public:
     Iterator end() const noexcept
     {
         return Iterator{ sentinel };
+    }
+
+    Iterator get_first() const noexcept
+    {
+        return Iterator{ sentinel->elementNext };
+    }
+
+    Iterator get_first() noexcept
+    {
+        return Iterator{ sentinel->elementNext };
+    }
+
+    Iterator get_last() const noexcept
+    {
+        return Iterator{ sentinel->elementPrevious };
+    }
+
+    Iterator get_last() noexcept
+    {
+        return Iterator{ sentinel->elementPrevious };
     }
 
     [[nodiscard]]

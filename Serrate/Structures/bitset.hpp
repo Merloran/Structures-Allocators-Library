@@ -355,6 +355,12 @@ public:
         return result;
     }
 
+    [[nodiscard]]
+    UInt64 hash() const noexcept
+    {
+        return Cryptography::hash(elements, sizeof(elements));
+    }
+
 private:
     constexpr Void clear_last_block() noexcept
     {
